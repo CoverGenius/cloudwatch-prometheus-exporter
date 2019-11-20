@@ -61,7 +61,7 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 			location, err := session.GetBucketLocation(&input)
 			h.LogError(err)
 
-			if *location.LocationConstraint != *nd.Parent.Region {
+			if location.LocationConstraint == nil || *location.LocationConstraint != *nd.Parent.Region {
 				return
 			}
 
