@@ -110,7 +110,9 @@ func main() {
 		r := region
 		session := session.Must(session.NewSession(&aws.Config{Region: r}))
 		cw := cloudwatch.New(session)
-		rd := base.RegionDescription{}
+		rd := base.RegionDescription{
+			Config: c,
+		}
 		rdd = append(rdd, &rd)
 		rd.Init(session, c.Tags, r, &c.Period)
 

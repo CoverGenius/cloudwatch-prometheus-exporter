@@ -1,7 +1,7 @@
 package base
 
 import (
-        h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/arn"
@@ -44,6 +44,12 @@ type DimensionDescription struct {
 	Value *string
 }
 
+type metric struct {
+	Data map[string]struct {
+		Length int `yaml:"length,omitempty"`
+	} `yaml:",omitempty,inline"`
+}
+
 type Config struct {
 	Listen       string            `yaml:"listen,omitempty"`
 	APIKey       string            `yaml:"api_key"`
@@ -53,6 +59,7 @@ type Config struct {
 	Regions      []*string         `yaml:"regions"`
 	PollInterval uint8             `yaml:"poll_interval,omitempty"`
 	LogLevel     uint8             `yaml:"log_level,omitempty"`
+	Metrics      metric            `yaml:"metrics,omitempty"`
 }
 
 type Metrics struct {
@@ -64,10 +71,14 @@ type MetricDescription struct {
 	Help       *string
 	Type       *string
 	OutputName *string
+	Dimensions []*cloudwatch.Dimension
+	Period     int
+	Statistic  *string
 	Data       map[string][]*string
 }
 
 type RegionDescription struct {
+	Config     *Config
 	Session    *session.Session
 	Tags       []*TagDescription
 	Region     *string
@@ -193,6 +204,7 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 		select {
 		case namespace := <-ndc:
 			Results.Mutex.Lock()
+			rd.Mutex.Lock()
 			for metric := range rd.Results[namespace] {
 				if _, ok := Results.Metric[*namespace.Namespace]; ok == false {
 					Results.Metric[*namespace.Namespace] = make(map[string]*MetricDescription)
@@ -203,15 +215,17 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 						Help:       namespace.Metrics[metric].Help,
 						Type:       namespace.Metrics[metric].Type,
 						OutputName: namespace.Metrics[metric].OutputName,
+						Period:     namespace.Metrics[metric].Period,
+						Statistic:  namespace.Metrics[metric].Statistic,
+						Dimensions: namespace.Metrics[metric].Dimensions,
 					}
 				}
 				if _, ok := Results.Metric[*namespace.Namespace][metric].Data[*rd.Region]; ok == false {
 					Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = []*string{}
 				}
-				rd.Mutex.RLock()
 				Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = rd.Results[namespace][metric]
-				rd.Mutex.RUnlock()
 			}
+			rd.Mutex.Unlock()
 			Results.Mutex.Unlock()
 		}
 	}
@@ -247,17 +261,19 @@ func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error
 
 func (rd *ResourceDescription) BuildQuery() error {
 	query := []*cloudwatch.MetricDataQuery{}
-	for metric := range rd.Parent.Metrics {
+	for key, value := range rd.Parent.Metrics {
+		dimensions := rd.Dimensions
+		dimensions = append(dimensions, value.Dimensions...)
 		cm := &cloudwatch.MetricDataQuery{
-			Id: rd.Parent.Metrics[metric].OutputName,
+			Id: rd.Parent.Metrics[key].OutputName,
 			MetricStat: &cloudwatch.MetricStat{
 				Metric: &cloudwatch.Metric{
-					MetricName: aws.String(metric),
+					MetricName: aws.String(key),
 					Namespace:  rd.Parent.Namespace,
-					Dimensions: rd.Dimensions,
+					Dimensions: dimensions,
 				},
-				Stat:   aws.String("Average"),
-				Period: aws.Int64(int64(*rd.Parent.Parent.Period)),
+				Stat:   value.Statistic,
+				Period: aws.Int64(int64(value.Period)),
 			},
 			ReturnData: aws.Bool(true),
 		}
@@ -287,11 +303,13 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 			*value,
 		)
 
+		rd.Parent.Parent.Mutex.Lock()
+		labels := strings.Split(*data.Label, " ")
+		metric := labels[len(labels)-1]
 		if _, ok := rd.Parent.Parent.Results[rd.Parent]; ok == false {
 			rd.Parent.Parent.Results[rd.Parent] = make(map[string][]*string)
 		}
-		rd.Parent.Parent.Mutex.Lock()
-		rd.Parent.Parent.Results[rd.Parent][*data.Label] = append(rd.Parent.Parent.Results[rd.Parent][*data.Label], &result)
+		rd.Parent.Parent.Results[rd.Parent][metric] = append(rd.Parent.Parent.Results[rd.Parent][metric], &result)
 		rd.Parent.Parent.Mutex.Unlock()
 	}
 
@@ -376,8 +394,18 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 
 func (rd *ResourceDescription) GetData(cw *cloudwatch.CloudWatch) (*cloudwatch.GetMetricDataOutput, error) {
 	rd.BuildQuery()
+	var startTime *time.Time
+
+	if val, ok := rd.Parent.Parent.Config.Metrics.Data[*rd.Parent.Namespace]; ok {
+		if val.Length > 0 {
+			time := rd.Parent.Parent.Time.EndTime.Add(time.Minute * -time.Duration(val.Length))
+			startTime = &time
+		}
+	} else {
+		startTime = rd.Parent.Parent.Time.StartTime
+	}
 	input := cloudwatch.GetMetricDataInput{
-		StartTime:         rd.Parent.Parent.Time.StartTime,
+		StartTime:         startTime,
 		EndTime:           rd.Parent.Parent.Time.EndTime,
 		MetricDataQueries: rd.Query,
 	}

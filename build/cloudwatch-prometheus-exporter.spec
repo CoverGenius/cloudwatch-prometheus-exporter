@@ -1,5 +1,11 @@
+# SPEC file overview:
+# https://docs.fedoraproject.org/en-US/quick-docs/creating-rpm-packages/#con_rpm-spec-file-overview
+# Fedora packaging guidelines:
+# https://docs.fedoraproject.org/en-US/packaging-guidelines/
+
+
 Name: cloudwatch-prometheus-exporter
-Version: 0.0.2
+Version: 0.0.5
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -32,5 +38,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Feb 11 2020 Serghei Anicheev <serghei@covergenius.com>
+- Now can specify length in config.yaml
+* Tue Dec 17 2019 Serghei Anicheev <serghei@covergenius.com>
+- Several fixes: map protection from concurrent access and DescribeTags limit
 * Tue Nov 19 2019 Serghei Anicheev <serghei@covergenius.com>
 - Initial commit

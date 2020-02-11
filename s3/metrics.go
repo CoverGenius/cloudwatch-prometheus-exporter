@@ -3,6 +3,7 @@ package s3
 import (
 	b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
 var metrics = map[string]*b.MetricDescription{
@@ -11,12 +12,28 @@ var metrics = map[string]*b.MetricDescription{
 		Type:       aws.String("counter"),
 		OutputName: aws.String("s3_bucket_size_bytes"),
 		Data:       map[string][]*string{},
+		Statistic:  aws.String("Average"),
+		Period:     1440,
+		Dimensions: []*cloudwatch.Dimension{
+			{
+				Name:  aws.String("StorageType"),
+				Value: aws.String("StandardStorage"),
+			},
+		},
 	},
 	"NumberOfObjects": {
 		Help:       aws.String("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
 		Type:       aws.String("counter"),
 		OutputName: aws.String("s3_number_of_objects"),
 		Data:       map[string][]*string{},
+		Statistic:  aws.String("Average"),
+		Period:     1440,
+		Dimensions: []*cloudwatch.Dimension{
+			{
+				Name:  aws.String("StorageType"),
+				Value: aws.String("AllStorageTypes"),
+			},
+		},
 	},
 }
 

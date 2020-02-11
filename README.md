@@ -17,4 +17,7 @@ tags:
 period: 5
 poll_interval: 5
 log_level: 4
+metrics:
+  AWS/S3:
+    length: 10080
 ```
