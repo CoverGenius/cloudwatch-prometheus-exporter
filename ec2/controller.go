@@ -28,6 +28,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	}
 
 	rd.ID = instance.InstanceId
+	rd.Name = instance.InstanceId
 	if name, ok := tags["Name"]; ok {
 		rd.Name = name
 	}
