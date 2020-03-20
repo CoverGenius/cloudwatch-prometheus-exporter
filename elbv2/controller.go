@@ -1,8 +1,8 @@
 package elbv2
 
 import (
-        b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
-        h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
+	b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	log "github.com/sirupsen/logrus"

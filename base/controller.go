@@ -1,8 +1,8 @@
 package base
 
 import (
-	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"fmt"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/aws/awserr"
