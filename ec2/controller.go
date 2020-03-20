@@ -1,13 +1,14 @@
 package ec2
 
 import (
-        b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
-        h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
+	b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
+
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"sync"
 )
 
 func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instance) error {
@@ -20,8 +21,16 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	}
 	err := rd.BuildDimensions(dd)
 	h.LogError(err)
+
+	tags := make(map[string]*string)
+	for _, t := range instance.Tags {
+		tags[*t.Key] = t.Value
+	}
+
 	rd.ID = instance.InstanceId
-	rd.Name = instance.InstanceId
+	if name, ok := tags["Name"]; ok {
+		rd.Name = name
+	}
 	rd.Type = aws.String("ec2")
 	rd.Parent = nd
 	rd.BuildQuery()
