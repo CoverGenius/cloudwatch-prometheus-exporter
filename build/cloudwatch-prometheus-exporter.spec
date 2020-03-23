@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.0.5
+Version: 0.0.6
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Mar 20 2020 Andrew Wright <andrew.w@covergenius.com>
+- Use the value of the "Name" tag to populate the ec2 name label if preset
 * Tue Feb 11 2020 Serghei Anicheev <serghei@covergenius.com>
 - Now can specify length in config.yaml
 * Tue Dec 17 2019 Serghei Anicheev <serghei@covergenius.com>
