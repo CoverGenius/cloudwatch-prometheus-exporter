@@ -2,7 +2,6 @@ package base
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -25,8 +24,7 @@ import (
 )
 
 var (
-	nan     float64 = math.NaN()
-	Results         = Metrics{
+	Results = Metrics{
 		Metric: make(map[string]map[string]*MetricDescription),
 	}
 )
@@ -289,12 +287,12 @@ func (rd *ResourceDescription) BuildQuery() error {
 func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error {
 	for _, data := range c.MetricDataResults {
 		size := float64(len(data.Values))
-		value := &nan
-		if size > 0 {
-			average, err := h.CountAverage(data.Values, &size)
-			h.LogError(err)
-			value = average
+		if size <= 0 {
+			continue
 		}
+		average, err := h.CountAverage(data.Values, &size)
+		h.LogError(err)
+		value := average
 		result := fmt.Sprintf(
 			"%s{name=\"%s\",id=\"%s\",type=\"%s\",region=\"%s\"} %.2f\n",
 			*data.Id,
