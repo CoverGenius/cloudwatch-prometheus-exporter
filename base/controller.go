@@ -2,6 +2,11 @@ package base
 
 import (
 	"fmt"
+	"math"
+	"strings"
+	"sync"
+	"time"
+
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/arn"
@@ -17,13 +22,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
 	log "github.com/sirupsen/logrus"
-	"strings"
-	"sync"
-	"time"
 )
 
 var (
-	nan     float64 = -1.0
+	nan     float64 = math.NaN()
 	Results         = Metrics{
 		Metric: make(map[string]map[string]*MetricDescription),
 	}
