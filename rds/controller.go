@@ -5,9 +5,10 @@ import (
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
 
+	"sync"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
-	"sync"
 )
 
 func CreateResourceDescription(nd *b.NamespaceDescription, dbi *rds.DBInstance) error {

@@ -3,23 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/ec2"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elasticache"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elb"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elbv2"
-	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/network"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/rds"
-	"github.com/CoverGenius/cloudwatch-prometheus-exporter/s3"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
+	"github.com/CoverGenius/cloudwatch-prometheus-exporter/rds"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	log "github.com/sirupsen/logrus"
 )
 
 var (

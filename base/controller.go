@@ -73,7 +73,7 @@ type MetricDescription struct {
 	OutputName *string
 	Dimensions []*cloudwatch.Dimension
 	Period     int
-	Statistic  *string
+	Statistic  []*string
 	Data       map[string][]*string
 }
 
@@ -107,6 +107,25 @@ type ResourceDescription struct {
 	Parent     *NamespaceDescription
 	Mutex      sync.RWMutex
 	Query      []*cloudwatch.MetricDataQuery
+}
+
+func (md *MetricDescription) MetricName(stat string) *string {
+	suffix := ""
+	switch stat {
+	case "Average":
+		// For backwards compatibility we have to omit the _avg
+		suffix = ""
+	case "Sum":
+		suffix = "_sum"
+	case "Minimum":
+		suffix = "_min"
+	case "Maximum":
+		suffix = "_max"
+	case "SampleCount":
+		suffix = "_count"
+	}
+	name := *md.OutputName + suffix
+	return &name
 }
 
 func (rd *RegionDescription) SetRequestTime() error {
@@ -206,24 +225,26 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 			Results.Mutex.Lock()
 			rd.Mutex.Lock()
 			for metric := range rd.Results[namespace] {
-				if _, ok := Results.Metric[*namespace.Namespace]; ok == false {
-					Results.Metric[*namespace.Namespace] = make(map[string]*MetricDescription)
-				}
-				if _, ok := Results.Metric[*namespace.Namespace][metric]; ok == false {
-					Results.Metric[*namespace.Namespace][metric] = &MetricDescription{
-						Data:       make(map[string][]*string),
-						Help:       namespace.Metrics[metric].Help,
-						Type:       namespace.Metrics[metric].Type,
-						OutputName: namespace.Metrics[metric].OutputName,
-						Period:     namespace.Metrics[metric].Period,
-						Statistic:  namespace.Metrics[metric].Statistic,
-						Dimensions: namespace.Metrics[metric].Dimensions,
+				for _, stat := range namespace.Metrics[metric].Statistic {
+					if _, ok := Results.Metric[*namespace.Namespace]; ok == false {
+						Results.Metric[*namespace.Namespace] = make(map[string]*MetricDescription)
 					}
+					if _, ok := Results.Metric[*namespace.Namespace][metric]; ok == false {
+						Results.Metric[*namespace.Namespace][metric] = &MetricDescription{
+							Data:       make(map[string][]*string),
+							Help:       namespace.Metrics[metric].Help,
+							Type:       namespace.Metrics[metric].Type,
+							OutputName: namespace.Metrics[metric].MetricName(*stat),
+							Period:     namespace.Metrics[metric].Period,
+							Statistic:  namespace.Metrics[metric].Statistic,
+							Dimensions: namespace.Metrics[metric].Dimensions,
+						}
+					}
+					if _, ok := Results.Metric[*namespace.Namespace][metric].Data[*rd.Region]; ok == false {
+						Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = []*string{}
+					}
+					Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = rd.Results[namespace][metric]
 				}
-				if _, ok := Results.Metric[*namespace.Namespace][metric].Data[*rd.Region]; ok == false {
-					Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = []*string{}
-				}
-				Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = rd.Results[namespace][metric]
 			}
 			rd.Mutex.Unlock()
 			Results.Mutex.Unlock()
@@ -264,20 +285,22 @@ func (rd *ResourceDescription) BuildQuery() error {
 	for key, value := range rd.Parent.Metrics {
 		dimensions := rd.Dimensions
 		dimensions = append(dimensions, value.Dimensions...)
-		cm := &cloudwatch.MetricDataQuery{
-			Id: rd.Parent.Metrics[key].OutputName,
-			MetricStat: &cloudwatch.MetricStat{
-				Metric: &cloudwatch.Metric{
-					MetricName: aws.String(key),
-					Namespace:  rd.Parent.Namespace,
-					Dimensions: dimensions,
+		for _, stat := range value.Statistic {
+			cm := &cloudwatch.MetricDataQuery{
+				Id: value.MetricName(*stat),
+				MetricStat: &cloudwatch.MetricStat{
+					Metric: &cloudwatch.Metric{
+						MetricName: aws.String(key),
+						Namespace:  rd.Parent.Namespace,
+						Dimensions: dimensions,
+					},
+					Stat:   stat,
+					Period: aws.Int64(int64(value.Period)),
 				},
-				Stat:   value.Statistic,
-				Period: aws.Int64(int64(value.Period)),
-			},
-			ReturnData: aws.Bool(true),
+				ReturnData: aws.Bool(true),
+			}
+			query = append(query, cm)
 		}
-		query = append(query, cm)
 	}
 	rd.Query = query
 
@@ -290,9 +313,37 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		if size <= 0 {
 			continue
 		}
-		average, err := h.CountAverage(data.Values, &size)
+
+		labels := strings.Split(*data.Label, " ")
+		metric := labels[0]
+		stat := labels[len(labels)-1]
+		if len(labels) <= 1 {
+			// If only one stat was specified for the metric then there won't be a
+			// label corresponding to the stat
+			stat = *rd.Parent.Metrics[metric].Statistic[0]
+		}
+
+		value := 0.0
+		var err error = nil
+		switch stat {
+		case "Average":
+			value, err = h.Average(data.Values)
+		case "Sum":
+			value, err = h.Sum(data.Values)
+		case "Minimum":
+			value, err = h.Min(data.Values)
+		case "Maximum":
+			value, err = h.Max(data.Values)
+		case "SampleCount":
+			value, err = h.Sum(data.Values)
+		default:
+			log.Errorf("Unknown Statistic type: %s", stat)
+		}
+
+		log.Debugf("Data: %v", data)
+		log.Debugf("%s: %f", stat, value)
+
 		h.LogError(err)
-		value := average
 		result := fmt.Sprintf(
 			"%s{name=\"%s\",id=\"%s\",type=\"%s\",region=\"%s\"} %.2f\n",
 			*data.Id,
@@ -300,12 +351,10 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 			*rd.ID,
 			*rd.Type,
 			*rd.Parent.Parent.Region,
-			*value,
+			value,
 		)
 
 		rd.Parent.Parent.Mutex.Lock()
-		labels := strings.Split(*data.Label, " ")
-		metric := labels[len(labels)-1]
 		if _, ok := rd.Parent.Parent.Results[rd.Parent]; ok == false {
 			rd.Parent.Parent.Results[rd.Parent] = make(map[string][]*string)
 		}
