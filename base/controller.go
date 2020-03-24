@@ -340,9 +340,6 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 			log.Errorf("Unknown Statistic type: %s", stat)
 		}
 
-		log.Debugf("Data: %v", data)
-		log.Debugf("%s: %f", stat, value)
-
 		h.LogError(err)
 		result := fmt.Sprintf(
 			"%s{name=\"%s\",id=\"%s\",type=\"%s\",region=\"%s\"} %.2f\n",
