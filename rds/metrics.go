@@ -13,7 +13,7 @@ var metrics = map[string]*b.MetricDescription{
 		Type:       aws.String("counter"),
 		OutputName: aws.String("rds_bin_log_disk_usage"),
 		Data:       map[string][]*string{},
-		Statistic:  h.StringPointers("Average", "Maximum"),
+		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
 	},
