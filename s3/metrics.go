@@ -2,6 +2,7 @@ package s3
 
 import (
 	b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
+	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
@@ -12,7 +13,7 @@ var metrics = map[string]*b.MetricDescription{
 		Type:       aws.String("counter"),
 		OutputName: aws.String("s3_bucket_size_bytes"),
 		Data:       map[string][]*string{},
-		Statistic:  aws.String("Average"),
+		Statistic:  h.StringPointers("Average"),
 		Period:     1440,
 		Dimensions: []*cloudwatch.Dimension{
 			{
@@ -26,7 +27,7 @@ var metrics = map[string]*b.MetricDescription{
 		Type:       aws.String("counter"),
 		OutputName: aws.String("s3_number_of_objects"),
 		Data:       map[string][]*string{},
-		Statistic:  aws.String("Average"),
+		Statistic:  h.StringPointers("Average"),
 		Period:     1440,
 		Dimensions: []*cloudwatch.Dimension{
 			{

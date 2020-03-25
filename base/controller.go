@@ -297,6 +297,9 @@ func (rd *ResourceDescription) BuildQuery() error {
 					Stat:   stat,
 					Period: aws.Int64(int64(value.Period)),
 				},
+				// We hardcode the label so that we can rely on the ordering in
+				// SaveData.
+				Label:      aws.String(fmt.Sprintf("%s %s", key, *stat)),
 				ReturnData: aws.Bool(true),
 			}
 			query = append(query, cm)
@@ -315,13 +318,9 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		labels := strings.Split(*data.Label, " ")
+
 		metric := labels[0]
 		stat := labels[len(labels)-1]
-		if len(labels) <= 1 {
-			// If only one stat was specified for the metric then there won't be a
-			// label corresponding to the stat
-			stat = *rd.Parent.Metrics[metric].Statistic[0]
-		}
 
 		value := 0.0
 		var err error = nil
