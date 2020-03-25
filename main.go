@@ -3,6 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
+	"os"
+	"sync"
+	"time"
+
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/ec2"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elasticache"
@@ -16,10 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	log "github.com/sirupsen/logrus"
-	"net/http"
-	"os"
-	"sync"
-	"time"
 )
 
 var (

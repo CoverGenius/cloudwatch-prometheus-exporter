@@ -38,6 +38,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Mar 25 2020 Andrew Wright <andrew.w@covergenius.com>
+- Add the ability to pick one or more different statistics for each metric
+* Mon Mar 23 2020 Andrew Wright <andrew.w@covergenius.com>
+- Don't publish any data for a metric if cloudwatch returns an empty results set
 * Fri Mar 20 2020 Andrew Wright <andrew.w@covergenius.com>
 - Use the value of the "Name" tag to populate the ec2 name label if preset
 * Tue Feb 11 2020 Serghei Anicheev <serghei@covergenius.com>
