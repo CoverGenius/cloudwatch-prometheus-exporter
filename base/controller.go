@@ -318,7 +318,6 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		labels := strings.Split(*data.Label, " ")
-
 		metric := labels[0]
 		stat := labels[len(labels)-1]
 
