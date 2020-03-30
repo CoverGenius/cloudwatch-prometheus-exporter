@@ -2,11 +2,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/ec2"
@@ -24,8 +26,10 @@ import (
 )
 
 var (
-	rdd    []*base.RegionDescription
-	config string
+	rdd            []*base.RegionDescription
+	config         string
+	globalRegistry *prometheus.Registry
+	totalRequests  prometheus.Counter
 )
 
 func init() {
@@ -52,22 +56,6 @@ func Run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd
 			go rd.GatherMetrics(cw)
 		}
 	}
-}
-
-func printMetrics(w http.ResponseWriter, r *http.Request) {
-	base.Results.Mutex.RLock()
-	for n := range base.Results.Metric {
-		for m := range base.Results.Metric[n] {
-			fmt.Fprintf(w, "# HELP %s %s\n", *base.Results.Metric[n][m].OutputName, *base.Results.Metric[n][m].Help)
-			fmt.Fprintf(w, "# TYPE %s %s\n", *base.Results.Metric[n][m].OutputName, *base.Results.Metric[n][m].Type)
-			for region := range base.Results.Metric[n][m].Data {
-				for _, entry := range base.Results.Metric[n][m].Data[region] {
-					fmt.Fprint(w, *entry)
-				}
-			}
-		}
-	}
-	base.Results.Mutex.RUnlock()
 }
 
 func processConfig(p *string) *base.Config {
@@ -107,6 +95,12 @@ func main() {
 	flag.Parse()
 	c := processConfig(&config)
 
+	totalRequests = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "cloudwatch_requests_total",
+		Help: "API requests made to CloudWatch",
+	})
+	prometheus.MustRegister(totalRequests)
+
 	for _, region := range c.Regions {
 		r := region
 		session := session.Must(session.NewSession(&aws.Config{Region: r}))
@@ -120,6 +114,6 @@ func main() {
 		go Run(rd.Namespaces, cw, &rd, &c.PollInterval)
 	}
 
-	http.HandleFunc("/metrics", printMetrics)
+	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(c.Listen, nil))
 }
