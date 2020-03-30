@@ -20,13 +20,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	Results = Metrics{
-		Metric: make(map[string]map[string]*MetricDescription),
-	}
+	results = make(map[string]*prometheus.GaugeVec)
 )
 
 type TimeDescription struct {
@@ -88,7 +87,6 @@ type RegionDescription struct {
 	Time       *TimeDescription
 	Mutex      sync.RWMutex
 	Period     *uint8
-	Results    map[*NamespaceDescription]map[string][]*string
 }
 
 type NamespaceDescription struct {
@@ -177,7 +175,6 @@ func (rd *RegionDescription) GetAccountId() error {
 
 func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, r *string, p *uint8) error {
 	log.Infof("Initializing region %s ...", *r)
-	rd.Results = make(map[*NamespaceDescription]map[string][]*string)
 	rd.Period = p
 	rd.Session = s
 	rd.Tags = td
@@ -211,45 +208,32 @@ func (rd *RegionDescription) CreateNamespaces() error {
 
 func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	log.Infof("Gathering metrics for region %s...", *rd.Region)
-	rd.Results = map[*NamespaceDescription]map[string][]*string{}
 	rd.SetRequestTime()
 
 	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
+		// Initialize metric containers if they don't already exist
+		for _, awsMetric := range namespace.Metrics {
+			for _, stat := range awsMetric.Statistic {
+				metricName := awsMetric.MetricName(*stat)
+				if _, ok := results[*metricName]; ok == false {
+					metric := prometheus.NewGaugeVec(
+						prometheus.GaugeOpts{
+							Name: *metricName,
+							Help: *awsMetric.Help,
+						},
+						[]string{"name", "id", "type", "region"},
+					)
+					results[*metricName] = metric
+					if err := prometheus.Register(metric); err != nil {
+						log.Fatalf("Error registering metric %s: %s", *metricName, err)
+					}
+				}
+			}
+		}
 		go namespace.GatherMetrics(cw, ndc)
 	}
 
-	for {
-		select {
-		case namespace := <-ndc:
-			Results.Mutex.Lock()
-			rd.Mutex.Lock()
-			for metric := range rd.Results[namespace] {
-				for _, stat := range namespace.Metrics[metric].Statistic {
-					if _, ok := Results.Metric[*namespace.Namespace]; ok == false {
-						Results.Metric[*namespace.Namespace] = make(map[string]*MetricDescription)
-					}
-					if _, ok := Results.Metric[*namespace.Namespace][metric]; ok == false {
-						Results.Metric[*namespace.Namespace][metric] = &MetricDescription{
-							Data:       make(map[string][]*string),
-							Help:       namespace.Metrics[metric].Help,
-							Type:       namespace.Metrics[metric].Type,
-							OutputName: namespace.Metrics[metric].MetricName(*stat),
-							Period:     namespace.Metrics[metric].Period,
-							Statistic:  namespace.Metrics[metric].Statistic,
-							Dimensions: namespace.Metrics[metric].Dimensions,
-						}
-					}
-					if _, ok := Results.Metric[*namespace.Namespace][metric].Data[*rd.Region]; ok == false {
-						Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = []*string{}
-					}
-					Results.Metric[*namespace.Namespace][metric].Data[*rd.Region] = rd.Results[namespace][metric]
-				}
-			}
-			rd.Mutex.Unlock()
-			Results.Mutex.Unlock()
-		}
-	}
 }
 
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
@@ -318,7 +302,6 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		labels := strings.Split(*data.Label, " ")
-		metric := labels[0]
 		stat := labels[len(labels)-1]
 
 		value := 0.0
@@ -335,25 +318,23 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		case "SampleCount":
 			value, err = h.Sum(data.Values)
 		default:
-			log.Errorf("Unknown Statistic type: %s", stat)
+			err = fmt.Errorf("Unknown Statistic type: %s", stat)
 		}
-
-		h.LogError(err)
-		result := fmt.Sprintf(
-			"%s{name=\"%s\",id=\"%s\",type=\"%s\",region=\"%s\"} %.2f\n",
-			*data.Id,
-			*rd.Name,
-			*rd.ID,
-			*rd.Type,
-			*rd.Parent.Parent.Region,
-			value,
-		)
+		if err != nil {
+			return err
+		}
 
 		rd.Parent.Parent.Mutex.Lock()
-		if _, ok := rd.Parent.Parent.Results[rd.Parent]; ok == false {
-			rd.Parent.Parent.Results[rd.Parent] = make(map[string][]*string)
+		if _, ok := results[*data.Id]; ok == true {
+			results[*data.Id].With(prometheus.Labels{
+				"name":   *rd.Name,
+				"id":     *rd.ID,
+				"type":   *rd.Type,
+				"region": *rd.Parent.Parent.Region,
+			}).Set(value)
+		} else {
+			return fmt.Errorf("Couldn't save metric %s", *data.Id)
 		}
-		rd.Parent.Parent.Results[rd.Parent][metric] = append(rd.Parent.Parent.Results[rd.Parent][metric], &result)
 		rd.Parent.Parent.Mutex.Unlock()
 	}
 
