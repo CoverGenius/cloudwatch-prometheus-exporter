@@ -25,8 +25,62 @@ import (
 )
 
 var (
-	results = make(map[string]*prometheus.GaugeVec)
+	results = make(map[string]prometheus.Collector)
 )
+
+func (m *MetricDescription) initializeMetric(stat string) {
+	name := *m.MetricName(stat)
+	if _, ok := results[name]; ok == true {
+		// metric is already initialized
+		return
+	}
+
+	var promMetric prometheus.Collector
+	if *m.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
+		promMetric = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: name,
+				Help: *m.Help,
+			},
+			[]string{"name", "id", "type", "region"},
+		)
+	} else {
+		if *m.Type == "counter" {
+			log.Infof(
+				"Cannot use metric type counter for stat %s. Metric %s will use a gauge instead",
+				stat,
+				name,
+			)
+		}
+		promMetric = prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: name,
+				Help: *m.Help,
+			},
+			[]string{"name", "id", "type", "region"},
+		)
+	}
+	results[name] = promMetric
+	if err := prometheus.Register(promMetric); err != nil {
+		log.Fatalf("Error registering metric %s: %s", name, err)
+	}
+}
+
+func updateMetric(name string, value float64, labels prometheus.Labels) error {
+	if _, ok := results[name]; ok == true {
+		switch metric := results[name].(type) {
+		case *prometheus.GaugeVec:
+			metric.With(labels).Set(value)
+		case *prometheus.CounterVec:
+			metric.With(labels).Add(value)
+		default:
+			return fmt.Errorf("Could not resolve type of metric %s", name)
+		}
+	} else {
+		return fmt.Errorf("Couldn't save metric %s", name)
+	}
+	return nil
+}
 
 type TimeDescription struct {
 	StartTime *time.Time
@@ -213,27 +267,13 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
 		// Initialize metric containers if they don't already exist
-		for _, awsMetric := range namespace.Metrics {
-			for _, stat := range awsMetric.Statistic {
-				metricName := awsMetric.MetricName(*stat)
-				if _, ok := results[*metricName]; ok == false {
-					metric := prometheus.NewGaugeVec(
-						prometheus.GaugeOpts{
-							Name: *metricName,
-							Help: *awsMetric.Help,
-						},
-						[]string{"name", "id", "type", "region"},
-					)
-					results[*metricName] = metric
-					if err := prometheus.Register(metric); err != nil {
-						log.Fatalf("Error registering metric %s: %s", *metricName, err)
-					}
-				}
+		for _, metric := range namespace.Metrics {
+			for _, stat := range metric.Statistic {
+				metric.initializeMetric(*stat)
 			}
 		}
 		go namespace.GatherMetrics(cw, ndc)
 	}
-
 }
 
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
@@ -325,17 +365,16 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		rd.Parent.Parent.Mutex.Lock()
-		if _, ok := results[*data.Id]; ok == true {
-			results[*data.Id].With(prometheus.Labels{
-				"name":   *rd.Name,
-				"id":     *rd.ID,
-				"type":   *rd.Type,
-				"region": *rd.Parent.Parent.Region,
-			}).Set(value)
-		} else {
-			return fmt.Errorf("Couldn't save metric %s", *data.Id)
-		}
+		err = updateMetric(*data.Id, value, prometheus.Labels{
+			"name":   *rd.Name,
+			"id":     *rd.ID,
+			"type":   *rd.Type,
+			"region": *rd.Parent.Parent.Region,
+		})
 		rd.Parent.Parent.Mutex.Unlock()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
