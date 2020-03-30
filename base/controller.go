@@ -299,9 +299,11 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		case "SampleCount":
 			value, err = h.Sum(data.Values)
 		default:
-			log.Errorf("Unknown Statistic type: %s", stat)
+			err = fmt.Errorf("Unknown Statistic type: %s", stat)
 		}
-		h.LogError(err)
+		if err != nil {
+			return err
+		}
 
 		rd.Parent.Parent.Mutex.Lock()
 		rd.savePrometheusResult(metric, *data.Id, value)
