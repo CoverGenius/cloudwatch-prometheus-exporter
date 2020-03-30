@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
@@ -26,10 +25,8 @@ import (
 )
 
 var (
-	rdd            []*base.RegionDescription
-	config         string
-	globalRegistry *prometheus.Registry
-	totalRequests  prometheus.Counter
+	rdd    []*base.RegionDescription
+	config string
 )
 
 func init() {
@@ -94,12 +91,6 @@ func processConfig(p *string) *base.Config {
 func main() {
 	flag.Parse()
 	c := processConfig(&config)
-
-	totalRequests = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "cloudwatch_requests_total",
-		Help: "API requests made to CloudWatch",
-	})
-	prometheus.MustRegister(totalRequests)
 
 	for _, region := range c.Regions {
 		r := region

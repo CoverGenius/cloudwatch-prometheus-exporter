@@ -318,22 +318,19 @@ func (rd *ResourceDescription) savePrometheusResult(awsMetric string, promMetric
 				Name: promMetric,
 				Help: *rd.Parent.Metrics[awsMetric].Help,
 			},
-			[]string{
-				// Value of the name tag if present
-				"name",
-				// unique resource identifier
-				"id",
-				"type",
-				// AWS region which the resource is in/associated with
-				"region",
-			},
+			[]string{"name", "id", "type", "region"},
 		)
 		results[promMetric] = metric
 		if err := prometheus.Register(metric); err != nil {
 			log.Fatalf("Error registering metric %s: %s", promMetric, err)
 		}
 	}
-	results[promMetric].With(prometheus.Labels{"name": *rd.Name, "id": *rd.ID, "type": *rd.Type, "region": *rd.Parent.Parent.Region}).Set(value)
+	results[promMetric].With(prometheus.Labels{
+		"name":   *rd.Name,
+		"id":     *rd.ID,
+		"type":   *rd.Type,
+		"region": *rd.Parent.Parent.Region,
+	}).Set(value)
 }
 
 func (rd *RegionDescription) TagsFound(tl interface{}) bool {
