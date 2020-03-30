@@ -212,8 +212,28 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 
 	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
-		namespace.GatherMetrics(cw, ndc)
+		// Initialize metric containers if they don't already exist
+		for _, awsMetric := range namespace.Metrics {
+			for _, stat := range awsMetric.Statistic {
+				metricName := awsMetric.MetricName(*stat)
+				if _, ok := results[*metricName]; ok == false {
+					metric := prometheus.NewGaugeVec(
+						prometheus.GaugeOpts{
+							Name: *metricName,
+							Help: *awsMetric.Help,
+						},
+						[]string{"name", "id", "type", "region"},
+					)
+					results[*metricName] = metric
+					if err := prometheus.Register(metric); err != nil {
+						log.Fatalf("Error registering metric %s: %s", *metricName, err)
+					}
+				}
+			}
+		}
+		go namespace.GatherMetrics(cw, ndc)
 	}
+
 }
 
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
@@ -282,7 +302,6 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		labels := strings.Split(*data.Label, " ")
-		metric := labels[0]
 		stat := labels[len(labels)-1]
 
 		value := 0.0
@@ -306,33 +325,20 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		rd.Parent.Parent.Mutex.Lock()
-		rd.savePrometheusResult(metric, *data.Id, value)
+		if _, ok := results[*data.Id]; ok == true {
+			results[*data.Id].With(prometheus.Labels{
+				"name":   *rd.Name,
+				"id":     *rd.ID,
+				"type":   *rd.Type,
+				"region": *rd.Parent.Parent.Region,
+			}).Set(value)
+		} else {
+			return fmt.Errorf("Couldn't save metric %s", *data.Id)
+		}
 		rd.Parent.Parent.Mutex.Unlock()
 	}
 
 	return nil
-}
-
-func (rd *ResourceDescription) savePrometheusResult(awsMetric string, promMetric string, value float64) {
-	if _, ok := results[promMetric]; ok == false {
-		metric := prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: promMetric,
-				Help: *rd.Parent.Metrics[awsMetric].Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-		results[promMetric] = metric
-		if err := prometheus.Register(metric); err != nil {
-			log.Fatalf("Error registering metric %s: %s", promMetric, err)
-		}
-	}
-	results[promMetric].With(prometheus.Labels{
-		"name":   *rd.Name,
-		"id":     *rd.ID,
-		"type":   *rd.Type,
-		"region": *rd.Parent.Parent.Region,
-	}).Set(value)
 }
 
 func (rd *RegionDescription) TagsFound(tl interface{}) bool {
