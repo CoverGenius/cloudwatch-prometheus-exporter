@@ -1,15 +1,32 @@
 package helpers
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
 
 var array []*float64
 
 func init() {
-	one := 1.0
-	two := 2.0
-	three := 3.0
-	four := 4.0
-	array = []*float64{&two, &one, &four, &three}
+	array = floatPointers(2, 1, 4, 3)
+}
+
+func floatPointers(values ...float64) []*float64 {
+	fp := make([]*float64, len(values))
+	for i, _ := range fp {
+		fp[i] = &values[i]
+	}
+	return fp
+}
+
+func timePointers(times ...time.Time) []*time.Time {
+	tp := make([]*time.Time, len(times))
+	for i, _ := range tp {
+		tp[i] = &times[i]
+	}
+	return tp
 }
 
 func TestMax(t *testing.T) {
@@ -49,5 +66,23 @@ func TestAverage(t *testing.T) {
 	}
 	if got != 2.5 {
 		t.Errorf("Average(%v) = %f; want 2.5", array, got)
+	}
+}
+
+var newValuesTests = []struct {
+	values    []*float64
+	times     []*time.Time
+	threshold time.Time
+	expected  []*float64
+}{
+	{floatPointers(), timePointers(), time.Now(), floatPointers()},
+	{floatPointers(1), timePointers(time.Now().Add(-time.Hour)), time.Now(), floatPointers()},
+	{floatPointers(1), timePointers(time.Now()), time.Now().Add(-time.Hour), floatPointers(1)},
+}
+
+func TestNewValues(t *testing.T) {
+	for _, v := range newValuesTests {
+		got := NewValues(v.values, v.times, v.threshold)
+		assert.Equal(t, v.expected, got)
 	}
 }

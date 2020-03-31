@@ -25,62 +25,9 @@ import (
 )
 
 var (
-	results = make(map[string]prometheus.Collector)
+	results    = make(map[string]prometheus.Collector)
+	timestamps = make(map[prometheus.Collector]*time.Time)
 )
-
-func (m *MetricDescription) initializeMetric(stat string) {
-	name := *m.MetricName(stat)
-	if _, ok := results[name]; ok == true {
-		// metric is already initialized
-		return
-	}
-
-	var promMetric prometheus.Collector
-	if *m.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
-		promMetric = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: name,
-				Help: *m.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	} else {
-		if *m.Type == "counter" {
-			log.Infof(
-				"Cannot use metric type counter for stat %s. Metric %s will use a gauge instead",
-				stat,
-				name,
-			)
-		}
-		promMetric = prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: name,
-				Help: *m.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	}
-	results[name] = promMetric
-	if err := prometheus.Register(promMetric); err != nil {
-		log.Fatalf("Error registering metric %s: %s", name, err)
-	}
-}
-
-func updateMetric(name string, value float64, labels prometheus.Labels) error {
-	if _, ok := results[name]; ok == true {
-		switch metric := results[name].(type) {
-		case *prometheus.GaugeVec:
-			metric.With(labels).Set(value)
-		case *prometheus.CounterVec:
-			metric.With(labels).Add(value)
-		default:
-			return fmt.Errorf("Could not resolve type of metric %s", name)
-		}
-	} else {
-		return fmt.Errorf("Couldn't save metric %s", name)
-	}
-	return nil
-}
 
 type TimeDescription struct {
 	StartTime *time.Time
@@ -161,7 +108,7 @@ type ResourceDescription struct {
 	Query      []*cloudwatch.MetricDataQuery
 }
 
-func (md *MetricDescription) MetricName(stat string) *string {
+func (md *MetricDescription) metricName(stat string) *string {
 	suffix := ""
 	switch stat {
 	case "Average":
@@ -290,6 +237,44 @@ func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc cha
 	}
 }
 
+func (m *MetricDescription) initializeMetric(stat string) {
+	name := *m.metricName(stat)
+	if _, ok := results[name]; ok == true {
+		// metric is already initialized
+		return
+	}
+
+	var promMetric prometheus.Collector
+	if *m.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
+		promMetric = prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: name,
+				Help: *m.Help,
+			},
+			[]string{"name", "id", "type", "region"},
+		)
+	} else {
+		if *m.Type == "counter" {
+			log.Debugf(
+				"Cannot use metric type counter for stat %s. Metric %s will use a gauge instead",
+				stat,
+				name,
+			)
+		}
+		promMetric = prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: name,
+				Help: *m.Help,
+			},
+			[]string{"name", "id", "type", "region"},
+		)
+	}
+	results[name] = promMetric
+	if err := prometheus.Register(promMetric); err != nil {
+		log.Fatalf("Error registering metric %s: %s", name, err)
+	}
+}
+
 func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error {
 	dl := []*cloudwatch.Dimension{}
 	for _, dimension := range dd {
@@ -311,7 +296,7 @@ func (rd *ResourceDescription) BuildQuery() error {
 		dimensions = append(dimensions, value.Dimensions...)
 		for _, stat := range value.Statistic {
 			cm := &cloudwatch.MetricDataQuery{
-				Id: value.MetricName(*stat),
+				Id: value.metricName(*stat),
 				MetricStat: &cloudwatch.MetricStat{
 					Metric: &cloudwatch.Metric{
 						MetricName: aws.String(key),
@@ -336,9 +321,32 @@ func (rd *ResourceDescription) BuildQuery() error {
 
 func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error {
 	for _, data := range c.MetricDataResults {
-		size := float64(len(data.Values))
-		if size <= 0 {
+		// Filter out old samples so they don't get double counted
+		values := data.Values
+		if len(values) <= 0 {
 			continue
+		}
+
+		promLabels := prometheus.Labels{
+			"name":   *rd.Name,
+			"id":     *rd.ID,
+			"type":   *rd.Type,
+			"region": *rd.Parent.Parent.Region,
+		}
+
+		if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
+			key, err := counter.GetMetricWith(promLabels)
+			if err != nil {
+				return err
+			}
+			if lastTimestamp, ok := timestamps[key]; ok == true {
+				values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
+			}
+			if len(values) <= 0 {
+				continue
+			}
+			// AWS returns the data in descending order
+			timestamps[key] = data.Timestamps[0]
 		}
 
 		labels := strings.Split(*data.Label, " ")
@@ -348,15 +356,15 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		var err error = nil
 		switch stat {
 		case "Average":
-			value, err = h.Average(data.Values)
+			value, err = h.Average(values)
 		case "Sum":
-			value, err = h.Sum(data.Values)
+			value, err = h.Sum(values)
 		case "Minimum":
-			value, err = h.Min(data.Values)
+			value, err = h.Min(values)
 		case "Maximum":
-			value, err = h.Max(data.Values)
+			value, err = h.Max(values)
 		case "SampleCount":
-			value, err = h.Sum(data.Values)
+			value, err = h.Sum(values)
 		default:
 			err = fmt.Errorf("Unknown Statistic type: %s", stat)
 		}
@@ -365,18 +373,29 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 		}
 
 		rd.Parent.Parent.Mutex.Lock()
-		err = updateMetric(*data.Id, value, prometheus.Labels{
-			"name":   *rd.Name,
-			"id":     *rd.ID,
-			"type":   *rd.Type,
-			"region": *rd.Parent.Parent.Region,
-		})
+		err = updateMetric(*data.Id, value, promLabels)
 		rd.Parent.Parent.Mutex.Unlock()
 		if err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func updateMetric(name string, value float64, labels prometheus.Labels) error {
+	if metric, ok := results[name]; ok == true {
+		switch m := metric.(type) {
+		case *prometheus.GaugeVec:
+			m.With(labels).Set(value)
+		case *prometheus.CounterVec:
+			m.With(labels).Add(value)
+		default:
+			return fmt.Errorf("Could not resolve type of metric %s", name)
+		}
+	} else {
+		return fmt.Errorf("Couldn't save metric %s", name)
+	}
 	return nil
 }
 
