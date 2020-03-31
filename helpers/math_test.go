@@ -1,15 +1,32 @@
 package helpers
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
 
 var array []*float64
 
 func init() {
-	one := 1.0
-	two := 2.0
-	three := 3.0
-	four := 4.0
-	array = []*float64{&two, &one, &four, &three}
+	array = f64Ptrs(2, 1, 4, 3)
+}
+
+func f64Ptrs(values ...float64) []*float64 {
+	fp := make([]*float64, len(values))
+	for i := range fp {
+		fp[i] = &values[i]
+	}
+	return fp
+}
+
+func tPtrs(times ...time.Time) []*time.Time {
+	tp := make([]*time.Time, len(times))
+	for i := range tp {
+		tp[i] = &times[i]
+	}
+	return tp
 }
 
 func TestMax(t *testing.T) {
@@ -17,9 +34,7 @@ func TestMax(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 4 {
-		t.Errorf("Max(%v) = %f; want 4", array, got)
-	}
+	assert.Equal(t, 4.0, got)
 }
 
 func TestMin(t *testing.T) {
@@ -27,9 +42,7 @@ func TestMin(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 1 {
-		t.Errorf("Min(%v) = %f; want 1", array, got)
-	}
+	assert.Equal(t, 1.0, got)
 }
 
 func TestSum(t *testing.T) {
@@ -37,9 +50,7 @@ func TestSum(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 10 {
-		t.Errorf("Sum(%v) = %f; want 10", array, got)
-	}
+	assert.Equal(t, 10.0, got)
 }
 
 func TestAverage(t *testing.T) {
@@ -49,5 +60,23 @@ func TestAverage(t *testing.T) {
 	}
 	if got != 2.5 {
 		t.Errorf("Average(%v) = %f; want 2.5", array, got)
+	}
+}
+
+var newValuesTests = []struct {
+	values    []*float64
+	times     []*time.Time
+	threshold time.Time
+	expected  []*float64
+}{
+	{f64Ptrs(), tPtrs(), time.Now(), f64Ptrs()},                             // Empty input should give empty output
+	{f64Ptrs(1), tPtrs(time.Now().Add(-time.Hour)), time.Now(), f64Ptrs()},  // threshold > time should give no output
+	{f64Ptrs(1), tPtrs(time.Now()), time.Now().Add(-time.Hour), f64Ptrs(1)}, // threshold < time should not filter result
+}
+
+func TestNewValues(t *testing.T) {
+	for _, v := range newValuesTests {
+		got := NewValues(v.values, v.times, v.threshold)
+		assert.Equal(t, v.expected, got)
 	}
 }
