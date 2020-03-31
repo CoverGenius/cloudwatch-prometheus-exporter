@@ -69,7 +69,6 @@ type Metrics struct {
 
 type MetricDescription struct {
 	Help       *string
-	Type       *string
 	OutputName *string
 	Dimensions []*cloudwatch.Dimension
 	Period     int
@@ -244,7 +243,7 @@ func (md *MetricDescription) initializeMetric(stat string) {
 	}
 
 	var promMetric prometheus.Collector
-	if *md.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
+	if stat == "Sum" || stat == "SampleCount" {
 		promMetric = prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: name,
@@ -253,13 +252,6 @@ func (md *MetricDescription) initializeMetric(stat string) {
 			[]string{"name", "id", "type", "region"},
 		)
 	} else {
-		if *md.Type == "counter" {
-			log.Debugf(
-				"Cannot use metric type counter for stat %s. Metric %s will use a gauge instead",
-				stat,
-				name,
-			)
-		}
 		promMetric = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: name,
