@@ -33,7 +33,7 @@ func init() {
 	flag.StringVar(&config, "config", "config.yaml", "Path to config file")
 }
 
-func Run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd *base.RegionDescription, pi *uint8) {
+func run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd *base.RegionDescription, pi *uint8) {
 	for {
 		select {
 		case <-time.After(time.Duration(*pi) * time.Minute):
@@ -102,7 +102,7 @@ func main() {
 		rdd = append(rdd, &rd)
 		rd.Init(session, c.Tags, r, &c.Period)
 
-		go Run(rd.Namespaces, cw, &rd, &c.PollInterval)
+		go run(rd.Namespaces, cw, &rd, &c.PollInterval)
 	}
 
 	http.Handle("/metrics", promhttp.Handler())

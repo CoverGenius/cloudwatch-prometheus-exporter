@@ -15,7 +15,7 @@ func init() {
 
 func floatPointers(values ...float64) []*float64 {
 	fp := make([]*float64, len(values))
-	for i, _ := range fp {
+	for i := range fp {
 		fp[i] = &values[i]
 	}
 	return fp
@@ -23,7 +23,7 @@ func floatPointers(values ...float64) []*float64 {
 
 func timePointers(times ...time.Time) []*time.Time {
 	tp := make([]*time.Time, len(times))
-	for i, _ := range tp {
+	for i := range tp {
 		tp[i] = &times[i]
 	}
 	return tp
@@ -34,9 +34,7 @@ func TestMax(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 4 {
-		t.Errorf("Max(%v) = %f; want 4", array, got)
-	}
+	assert.Equal(t, 4.0, got)
 }
 
 func TestMin(t *testing.T) {
@@ -44,9 +42,7 @@ func TestMin(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 1 {
-		t.Errorf("Min(%v) = %f; want 1", array, got)
-	}
+	assert.Equal(t, 1.0, got)
 }
 
 func TestSum(t *testing.T) {
@@ -54,9 +50,7 @@ func TestSum(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got err %s", err)
 	}
-	if got != 10 {
-		t.Errorf("Sum(%v) = %f; want 10", array, got)
-	}
+	assert.Equal(t, 10.0, got)
 }
 
 func TestAverage(t *testing.T) {
@@ -75,9 +69,9 @@ var newValuesTests = []struct {
 	threshold time.Time
 	expected  []*float64
 }{
-	{floatPointers(), timePointers(), time.Now(), floatPointers()},
-	{floatPointers(1), timePointers(time.Now().Add(-time.Hour)), time.Now(), floatPointers()},
-	{floatPointers(1), timePointers(time.Now()), time.Now().Add(-time.Hour), floatPointers(1)},
+	{floatPointers(), timePointers(), time.Now(), floatPointers()},                             // Empty input should give empty output
+	{floatPointers(1), timePointers(time.Now().Add(-time.Hour)), time.Now(), floatPointers()},  // threshold > time should give no output
+	{floatPointers(1), timePointers(time.Now()), time.Now().Add(-time.Hour), floatPointers(1)}, // threshold < time should not filter result
 }
 
 func TestNewValues(t *testing.T) {

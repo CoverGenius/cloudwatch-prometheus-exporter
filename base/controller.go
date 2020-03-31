@@ -237,24 +237,24 @@ func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc cha
 	}
 }
 
-func (m *MetricDescription) initializeMetric(stat string) {
-	name := *m.metricName(stat)
+func (md *MetricDescription) initializeMetric(stat string) {
+	name := *md.metricName(stat)
 	if _, ok := results[name]; ok == true {
 		// metric is already initialized
 		return
 	}
 
 	var promMetric prometheus.Collector
-	if *m.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
+	if *md.Type == "counter" && (stat == "Sum" || stat == "SampleCount") {
 		promMetric = prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: name,
-				Help: *m.Help,
+				Help: *md.Help,
 			},
 			[]string{"name", "id", "type", "region"},
 		)
 	} else {
-		if *m.Type == "counter" {
+		if *md.Type == "counter" {
 			log.Debugf(
 				"Cannot use metric type counter for stat %s. Metric %s will use a gauge instead",
 				stat,
@@ -264,7 +264,7 @@ func (m *MetricDescription) initializeMetric(stat string) {
 		promMetric = prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: name,
-				Help: *m.Help,
+				Help: *md.Help,
 			},
 			[]string{"name", "id", "type", "region"},
 		)
@@ -455,7 +455,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 
 	l1 := len(rd.Tags)
 	l2 := len(tags)
-	number_of_negative_matches := l1
+	numberOfNegativeMatches := l1
 
 	if l1 > l2 {
 		return false
@@ -464,11 +464,11 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 	for _, left := range rd.Tags {
 		for _, right := range tags {
 			if *left.Key == *right.Key && *left.Value == *right.Value {
-				number_of_negative_matches--
+				numberOfNegativeMatches--
 				break
 			}
 		}
-		if number_of_negative_matches == 0 {
+		if numberOfNegativeMatches == 0 {
 			return true
 		}
 	}

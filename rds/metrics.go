@@ -163,7 +163,7 @@ var metrics = map[string]*b.MetricDescription{
 	},
 	"OldestReplicationSlotLag": {
 		Help:       aws.String("The lagging size of the replica lagging the most in terms of WAL data received. Applies to PostgreSQL"),
-		Type:       aws.String("counter"),
+		Type:       aws.String("gauge"),
 		OutputName: aws.String("rds_oldest_replication_slot_lag"),
 		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
