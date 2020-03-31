@@ -10,10 +10,10 @@ import (
 var array []*float64
 
 func init() {
-	array = floatPointers(2, 1, 4, 3)
+	array = f64Ptrs(2, 1, 4, 3)
 }
 
-func floatPointers(values ...float64) []*float64 {
+func f64Ptrs(values ...float64) []*float64 {
 	fp := make([]*float64, len(values))
 	for i := range fp {
 		fp[i] = &values[i]
@@ -21,7 +21,7 @@ func floatPointers(values ...float64) []*float64 {
 	return fp
 }
 
-func timePointers(times ...time.Time) []*time.Time {
+func tPtrs(times ...time.Time) []*time.Time {
 	tp := make([]*time.Time, len(times))
 	for i := range tp {
 		tp[i] = &times[i]
@@ -69,9 +69,9 @@ var newValuesTests = []struct {
 	threshold time.Time
 	expected  []*float64
 }{
-	{floatPointers(), timePointers(), time.Now(), floatPointers()},                             // Empty input should give empty output
-	{floatPointers(1), timePointers(time.Now().Add(-time.Hour)), time.Now(), floatPointers()},  // threshold > time should give no output
-	{floatPointers(1), timePointers(time.Now()), time.Now().Add(-time.Hour), floatPointers(1)}, // threshold < time should not filter result
+	{f64Ptrs(), tPtrs(), time.Now(), f64Ptrs()},                             // Empty input should give empty output
+	{f64Ptrs(1), tPtrs(time.Now().Add(-time.Hour)), time.Now(), f64Ptrs()},  // threshold > time should give no output
+	{f64Ptrs(1), tPtrs(time.Now()), time.Now().Add(-time.Hour), f64Ptrs(1)}, // threshold < time should not filter result
 }
 
 func TestNewValues(t *testing.T) {

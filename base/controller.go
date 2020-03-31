@@ -230,8 +230,7 @@ func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc cha
 			resource.Parent = nd
 			result, err := resource.GetData(cw)
 			h.LogError(err)
-			err = resource.SaveData(result)
-			h.LogError(err)
+			resource.SaveData(result)
 			ndc <- nd
 		}(resource, ndc)
 	}
@@ -319,41 +318,50 @@ func (rd *ResourceDescription) BuildQuery() error {
 	return nil
 }
 
-func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error {
-	for _, data := range c.MetricDataResults {
-		// Filter out old samples so they don't get double counted
-		values := data.Values
-		if len(values) <= 0 {
-			continue
-		}
-
-		promLabels := prometheus.Labels{
+func (rd *ResourceDescription) filterValues(data *cloudwatch.MetricDataResult) ([]*float64, error) {
+	// In the case of a counter we need to remove any datapoints which have
+	// already been added to the counter, otherwise if the poll intervals
+	// overlap we will double count some data.
+	values := data.Values
+	if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
+		counter, err := counter.GetMetricWith(prometheus.Labels{
 			"name":   *rd.Name,
 			"id":     *rd.ID,
 			"type":   *rd.Type,
 			"region": *rd.Parent.Parent.Region,
+		})
+		if err != nil {
+			return nil, err
+		}
+		rd.Mutex.Lock()
+		defer rd.Mutex.Unlock()
+		if lastTimestamp, ok := timestamps[counter]; ok == true {
+			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
+		}
+		if len(values) > 0 {
+			// AWS returns the data in descending order
+			timestamps[counter] = data.Timestamps[0]
+		}
+	}
+	return values, nil
+}
+
+func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) {
+	for _, data := range c.MetricDataResults {
+		if len(data.Values) <= 0 {
+			continue
 		}
 
-		if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
-			key, err := counter.GetMetricWith(promLabels)
-			if err != nil {
-				return err
-			}
-			if lastTimestamp, ok := timestamps[key]; ok == true {
-				values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
-			}
-			if len(values) <= 0 {
-				continue
-			}
-			// AWS returns the data in descending order
-			timestamps[key] = data.Timestamps[0]
+		values, err := rd.filterValues(data)
+		if len(values) <= 0 || err != nil {
+			h.LogError(err)
+			continue
 		}
 
 		labels := strings.Split(*data.Label, " ")
 		stat := labels[len(labels)-1]
 
 		value := 0.0
-		var err error = nil
 		switch stat {
 		case "Average":
 			value, err = h.Average(values)
@@ -369,21 +377,27 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) error
 			err = fmt.Errorf("Unknown Statistic type: %s", stat)
 		}
 		if err != nil {
-			return err
+			h.LogError(err)
+			continue
 		}
 
-		rd.Parent.Parent.Mutex.Lock()
-		err = updateMetric(*data.Id, value, promLabels)
-		rd.Parent.Parent.Mutex.Unlock()
+		err = rd.updateMetric(*data.Id, value)
 		if err != nil {
-			return err
+			h.LogError(err)
+			continue
 		}
 	}
-
-	return nil
 }
 
-func updateMetric(name string, value float64, labels prometheus.Labels) error {
+func (rd *ResourceDescription) updateMetric(name string, value float64) error {
+	labels := prometheus.Labels{
+		"name":   *rd.Name,
+		"id":     *rd.ID,
+		"type":   *rd.Type,
+		"region": *rd.Parent.Parent.Region,
+	}
+	rd.Parent.Parent.Mutex.Lock()
+	defer rd.Parent.Parent.Mutex.Unlock()
 	if metric, ok := results[name]; ok == true {
 		switch m := metric.(type) {
 		case *prometheus.GaugeVec:
