@@ -5,9 +5,10 @@ import (
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
 
+	"sync"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/elb"
-	"sync"
 )
 
 func CreateResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescription) error {
@@ -30,6 +31,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescriptio
 	return nil
 }
 
+// CreateResourceList fetches a list of all Classic LB resources in the region
 func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating Classic LB resource list ...")
@@ -40,12 +42,16 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	result, err := session.DescribeLoadBalancers(&input)
 	h.LogError(err)
 
-	resource_list := []*string{}
+	resourceList := []*string{}
 	for _, lb := range result.LoadBalancerDescriptions {
-		resource_list = append(resource_list, lb.LoadBalancerName)
+		resourceList = append(resourceList, lb.LoadBalancerName)
 	}
+	if len(resourceList) <= 0 {
+		return nil
+	}
+
 	dti := elb.DescribeTagsInput{
-		LoadBalancerNames: resource_list,
+		LoadBalancerNames: resourceList,
 	}
 	tags, err := session.DescribeTags(&dti)
 	h.LogError(err)
