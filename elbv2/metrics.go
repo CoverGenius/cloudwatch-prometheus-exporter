@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-var metrics_alb = map[string]*b.MetricDescription{
+var metricsALB = map[string]*b.MetricDescription{
 	"ActiveConnectionCount": {
 		Help:       aws.String("The total number of concurrent TCP connections active from clients to the load balancer and from the load balancer to targets"),
 		OutputName: aws.String("alb_alive_connection_count"),
@@ -178,7 +178,7 @@ var metrics_alb = map[string]*b.MetricDescription{
 	},
 }
 
-var metrics_nlb = map[string]*b.MetricDescription{
+var metricsNLB = map[string]*b.MetricDescription{
 	"ActiveFlowCount": {
 		Help:       aws.String("The total number of concurrent flows (or connections) from clients to targets. This metric includes connections in the SYN_SENT and ESTABLISHED states. TCP connections are not terminated at the load balancer, so a client opening a TCP connection to a target counts as a single flow"),
 		OutputName: aws.String("nlb_active_flow_count"),
@@ -253,13 +253,14 @@ var metrics_nlb = map[string]*b.MetricDescription{
 	},
 }
 
+// GetMetrics returns a map of MetricDescriptions to be exported for this namespace
 func GetMetrics(t *string) map[string]*b.MetricDescription {
 	switch *t {
 	case "lb-network":
-		return metrics_nlb
+		return metricsNLB
 	case "lb-application":
-		return metrics_alb
+		return metricsALB
 	default:
-		return metrics_alb
+		return metricsALB
 	}
 }

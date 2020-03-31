@@ -40,6 +40,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	return nil
 }
 
+// CreateResourceList fetches a list of all EC2 instances in the parent region
 func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating EC2 resource list ...")

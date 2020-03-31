@@ -9,7 +9,7 @@ import (
 //
 // If the input slice is empty returns 0
 func Average(items []*float64) (float64, error) {
-	var sum float64 = 0
+	var sum float64
 	for _, item := range items {
 		sum += *item
 	}
@@ -19,7 +19,7 @@ func Average(items []*float64) (float64, error) {
 
 // Sum returns the sum of a slice of float64 pointers
 func Sum(items []*float64) (float64, error) {
-	var sum float64 = 0
+	var sum float64
 	for _, item := range items {
 		sum += *item
 	}
@@ -34,7 +34,7 @@ func Min(items []*float64) (float64, error) {
 		return 0.0, errors.New("Cannot calculate minimum of empty list")
 	}
 
-	var min float64 = *items[0]
+	var min = *items[0]
 	for _, item := range items {
 		if *item < min {
 			min = *item
@@ -45,7 +45,7 @@ func Min(items []*float64) (float64, error) {
 
 // Max returns the largest value from a slice of float64 pointers
 func Max(items []*float64) (float64, error) {
-	var max float64 = 0
+	var max float64
 	for _, item := range items {
 		if *item > max {
 			max = *item

@@ -28,16 +28,19 @@ var (
 	results = make(map[string]prometheus.Collector)
 )
 
+// TimeDescription represents an interval with a specific start and finish time
 type TimeDescription struct {
 	StartTime *time.Time
 	EndTime   *time.Time
 }
 
+// TagDescription represents an AWS tag key value pair
 type TagDescription struct {
 	Key   *string `yaml:"name"`
 	Value *string `yaml:"value"`
 }
 
+// DimensionDescription represents a Cloudwatch dimension key value pair
 type DimensionDescription struct {
 	Name  *string
 	Value *string
@@ -66,6 +69,8 @@ type Metrics struct {
 	Metric map[string]map[string]*MetricDescription
 }
 
+// MetricDescription describes a single Cloudwatch metric with one or more
+// statistics to be monitored for relevant resources
 type MetricDescription struct {
 	Help       *string
 	OutputName *string
@@ -75,6 +80,7 @@ type MetricDescription struct {
 	Data       map[string][]*string
 }
 
+// RegionDescription describes an AWS region which will be monitored via cloudwatch
 type RegionDescription struct {
 	Config     *Config
 	Session    *session.Session
@@ -88,6 +94,8 @@ type RegionDescription struct {
 	Period     *uint8
 }
 
+// NamespaceDescription describes an AWS namespace to be monitored via cloudwatch
+// e.g. EC2 or S3
 type NamespaceDescription struct {
 	Namespace *string
 	Resources []*ResourceDescription
@@ -96,6 +104,8 @@ type NamespaceDescription struct {
 	Metrics   map[string]*MetricDescription
 }
 
+// ResourceDescription describes a single AWS resource which will be monitored via
+// one or more cloudwatch metrics.
 type ResourceDescription struct {
 	Name       *string
 	ID         *string
@@ -126,7 +136,7 @@ func (md *MetricDescription) metricName(stat string) *string {
 	return &name
 }
 
-func (rd *RegionDescription) SetRequestTime() error {
+func (rd *RegionDescription) setRequestTime() error {
 	log.Debug("Setting request time ...")
 	td := TimeDescription{}
 	t := time.Now().Round(time.Minute * 5)
@@ -137,7 +147,8 @@ func (rd *RegionDescription) SetRequestTime() error {
 	return nil
 }
 
-func (rd *RegionDescription) BuildArn(s *string, r *string) (string, error) {
+// BuildARN returns the AWS ARN of a resource in a region given the input service and resource
+func (rd *RegionDescription) BuildARN(s *string, r *string) (string, error) {
 	a := arn.ARN{
 		Service:   *s,
 		Region:    *rd.Region,
@@ -148,7 +159,7 @@ func (rd *RegionDescription) BuildArn(s *string, r *string) (string, error) {
 	return a.String(), nil
 }
 
-func (rd *RegionDescription) BuildFilters() error {
+func (rd *RegionDescription) buildFilters() error {
 	filters := []*ec2.Filter{}
 	for _, tag := range rd.Tags {
 		f := &ec2.Filter{
@@ -161,7 +172,7 @@ func (rd *RegionDescription) BuildFilters() error {
 	return nil
 }
 
-func (rd *RegionDescription) GetAccountId() error {
+func (rd *RegionDescription) saveAccountID() error {
 	session := iam.New(rd.Session)
 	input := iam.GetUserInput{}
 	user, err := session.GetUser(&input)
@@ -173,6 +184,8 @@ func (rd *RegionDescription) GetAccountId() error {
 	return nil
 }
 
+// Init initializes a region and its nested namspaces in preparation for collection
+// cloudwatchc metrics for that region.
 func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, r *string, p *uint8) error {
 	log.Infof("Initializing region %s ...", *r)
 	rd.Period = p
@@ -180,19 +193,20 @@ func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, r *s
 	rd.Tags = td
 	rd.Region = r
 
-	err := rd.GetAccountId()
+	err := rd.saveAccountID()
 	h.LogErrorExit(err)
 
-	err = rd.BuildFilters()
+	err = rd.buildFilters()
 	h.LogErrorExit(err)
 
-	err = rd.CreateNamespaces()
+	err = rd.CreateNamespaceDescriptions()
 	h.LogErrorExit(err)
 
 	return nil
 }
 
-func (rd *RegionDescription) CreateNamespaces() error {
+// CreateNamespaceDescriptions populates the list of NamespaceDescriptions for an AWS region
+func (rd *RegionDescription) CreateNamespaceDescriptions() error {
 	namespaces := GetNamespaces()
 	rd.Namespaces = make(map[string]*NamespaceDescription)
 	for _, namespace := range namespaces {
@@ -206,9 +220,10 @@ func (rd *RegionDescription) CreateNamespaces() error {
 	return nil
 }
 
+// GatherMetrics queries the Cloudwatch API for metrics related to the resources in this region
 func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	log.Infof("Gathering metrics for region %s...", *rd.Region)
-	rd.SetRequestTime()
+	rd.setRequestTime()
 
 	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
@@ -222,14 +237,15 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	}
 }
 
+// GatherMetrics queries the Cloudwatch API for metrics related to this AWS namespace in the parent region
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
 	for _, r := range nd.Resources {
 		resource := r
 		go func(rd *ResourceDescription, ndc chan *NamespaceDescription) {
 			resource.Parent = nd
-			result, err := resource.GetData(cw)
+			result, err := resource.getData(cw)
 			h.LogError(err)
-			resource.SaveData(result)
+			resource.saveData(result)
 			ndc <- nd
 		}(resource, ndc)
 	}
@@ -266,6 +282,7 @@ func (md *MetricDescription) initializeMetric(stat string) {
 	}
 }
 
+// BuildDimensions coverts a slice of DimensionDescription to a slice of cloudwatchDimension and associates it with the resource
 func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error {
 	dl := []*cloudwatch.Dimension{}
 	for _, dimension := range dd {
@@ -280,6 +297,7 @@ func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error
 	return nil
 }
 
+// BuildQuery constructs and saves the cloudwatch query for all the metrics associated with the resource
 func (rd *ResourceDescription) BuildQuery() error {
 	query := []*cloudwatch.MetricDataQuery{}
 	for key, value := range rd.Parent.Metrics {
@@ -298,7 +316,7 @@ func (rd *ResourceDescription) BuildQuery() error {
 					Period: aws.Int64(int64(value.Period)),
 				},
 				// We hardcode the label so that we can rely on the ordering in
-				// SaveData.
+				// saveData.
 				Label:      aws.String(fmt.Sprintf("%s %s", key, *stat)),
 				ReturnData: aws.Bool(true),
 			}
@@ -310,7 +328,7 @@ func (rd *ResourceDescription) BuildQuery() error {
 	return nil
 }
 
-func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) {
+func (rd *ResourceDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
 	for _, data := range c.MetricDataResults {
 		if len(data.Values) <= 0 {
 			continue
@@ -484,7 +502,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 	return false
 }
 
-func (rd *ResourceDescription) GetData(cw *cloudwatch.CloudWatch) (*cloudwatch.GetMetricDataOutput, error) {
+func (rd *ResourceDescription) getData(cw *cloudwatch.CloudWatch) (*cloudwatch.GetMetricDataOutput, error) {
 	rd.BuildQuery()
 	var startTime *time.Time
 
@@ -507,7 +525,8 @@ func (rd *ResourceDescription) GetData(cw *cloudwatch.CloudWatch) (*cloudwatch.G
 	return result, err
 }
 
-func SameErrorType(l error, r *string) bool {
+// IsSameErrorType returns true if the input error l is an AWS error with the same code as the input code r
+func IsSameErrorType(l error, r *string) bool {
 	if l != nil {
 		if aerr, ok := l.(awserr.Error); ok {
 			code := aerr.Code()

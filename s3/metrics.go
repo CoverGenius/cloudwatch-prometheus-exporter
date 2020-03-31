@@ -36,6 +36,7 @@ var metrics = map[string]*b.MetricDescription{
 	},
 }
 
+// GetMetrics returns a map of MetricDescriptions to be exported for this namespace
 func GetMetrics() map[string]*b.MetricDescription {
 	return metrics
 }

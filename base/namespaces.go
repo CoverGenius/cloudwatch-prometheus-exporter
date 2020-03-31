@@ -11,6 +11,7 @@ var namespaces = []string{
 	"AWS/S3",
 }
 
+// GetNamespaces returns a list of AWS namespaces which are configured for this exporter
 func GetNamespaces() []string {
 	return namespaces
 }
