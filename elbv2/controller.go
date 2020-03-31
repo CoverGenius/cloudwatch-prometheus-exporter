@@ -12,14 +12,14 @@ import (
 )
 
 func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescription) error {
-	lb_id := strings.Split(*td.ResourceArn, "loadbalancer/")[1]
-	lb_type_and_name := strings.Split(lb_id, "/")
-	lb_name := lb_type_and_name[1]
+	lbID := strings.Split(*td.ResourceArn, "loadbalancer/")[1]
+	lbTypeAndName := strings.Split(lbID, "/")
+	lbName := lbTypeAndName[1]
 
 	rd := b.ResourceDescription{}
-	if lb_type_and_name[0] == "net" && *nd.Namespace == "AWS/NetworkELB" {
+	if lbTypeAndName[0] == "net" && *nd.Namespace == "AWS/NetworkELB" {
 		rd.Type = aws.String("lb-network")
-	} else if lb_type_and_name[0] == "app" && *nd.Namespace == "AWS/ApplicationELB" {
+	} else if lbTypeAndName[0] == "app" && *nd.Namespace == "AWS/ApplicationELB" {
 		rd.Type = aws.String("lb-application")
 	} else {
 		return nil
@@ -28,13 +28,13 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescript
 	dd := []*b.DimensionDescription{
 		{
 			Name:  aws.String("LoadBalancer"),
-			Value: aws.String(lb_id),
+			Value: aws.String(lbID),
 		},
 	}
 	err := rd.BuildDimensions(dd)
 	h.LogError(err)
 	rd.ID = td.ResourceArn
-	rd.Name = &lb_name
+	rd.Name = &lbName
 	rd.Parent = nd
 	rd.BuildQuery()
 	nd.Metrics = GetMetrics(rd.Type)
@@ -43,6 +43,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescript
 	return nil
 }
 
+// CreateResourceList fetches a list of all ALB/NLB resources in the region
 func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating ALB/NLB resource list ...")
@@ -52,17 +53,29 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	result, err := session.DescribeLoadBalancers(&input)
 	h.LogError(err)
 
-	resource_list := []*string{}
+	resourceList := []*string{}
 	for _, lb := range result.LoadBalancers {
-		resource_list = append(resource_list, lb.LoadBalancerArn)
+		resourceList = append(resourceList, lb.LoadBalancerArn)
 	}
-	dti := elbv2.DescribeTagsInput{
-		ResourceArns: resource_list,
-	}
-	tags, err := session.DescribeTags(&dti)
-	h.LogError(err)
 
-	for _, td := range tags.TagDescriptions {
+	// The AWS ELBV2 API has a limit of 20 resources which can be described in one request
+	chunkSize := 20
+	tagDescriptions := []*elbv2.TagDescription{}
+	for i := 0; i < len(resourceList); i += chunkSize {
+		end := i + chunkSize
+		if end > len(resourceList) {
+			end = len(resourceList)
+		}
+
+		dti := elbv2.DescribeTagsInput{
+			ResourceArns: resourceList[i:end],
+		}
+		tags, err := session.DescribeTags(&dti)
+		h.LogError(err)
+		tagDescriptions = append(tagDescriptions, tags.TagDescriptions...)
+	}
+
+	for _, td := range tagDescriptions {
 		if nd.Parent.TagsFound(td) {
 			err := CreateResourceDescription(nd, td)
 			h.LogError(err)
