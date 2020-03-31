@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.0.8
+Version: 0.0.9
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Mar 31 2020 Andrew Wright <andrew.w@covergenius.com>
+- Automatically determine the metric type based on the metric aggregation used
 * Mon Mar 30 2020 Andrew Wright <andrew.w@covergenius.com>
 - Use the official prometheus client library to manage internal metric representation
 * Wed Mar 25 2020 Andrew Wright <andrew.w@covergenius.com>

@@ -25,8 +25,7 @@ import (
 )
 
 var (
-	results    = make(map[string]prometheus.Collector)
-	timestamps = make(map[prometheus.Collector]*time.Time)
+	results = make(map[string]prometheus.Collector)
 )
 
 type TimeDescription struct {
@@ -105,6 +104,7 @@ type ResourceDescription struct {
 	Parent     *NamespaceDescription
 	Mutex      sync.RWMutex
 	Query      []*cloudwatch.MetricDataQuery
+	timestamps map[prometheus.Collector]*time.Time
 }
 
 func (md *MetricDescription) metricName(stat string) *string {
@@ -310,34 +310,6 @@ func (rd *ResourceDescription) BuildQuery() error {
 	return nil
 }
 
-func (rd *ResourceDescription) filterValues(data *cloudwatch.MetricDataResult) ([]*float64, error) {
-	// In the case of a counter we need to remove any datapoints which have
-	// already been added to the counter, otherwise if the poll intervals
-	// overlap we will double count some data.
-	values := data.Values
-	if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
-		counter, err := counter.GetMetricWith(prometheus.Labels{
-			"name":   *rd.Name,
-			"id":     *rd.ID,
-			"type":   *rd.Type,
-			"region": *rd.Parent.Parent.Region,
-		})
-		if err != nil {
-			return nil, err
-		}
-		rd.Mutex.Lock()
-		defer rd.Mutex.Unlock()
-		if lastTimestamp, ok := timestamps[counter]; ok == true {
-			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
-		}
-		if len(values) > 0 {
-			// AWS returns the data in descending order
-			timestamps[counter] = data.Timestamps[0]
-		}
-	}
-	return values, nil
-}
-
 func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) {
 	for _, data := range c.MetricDataResults {
 		if len(data.Values) <= 0 {
@@ -379,6 +351,37 @@ func (rd *ResourceDescription) SaveData(c *cloudwatch.GetMetricDataOutput) {
 			continue
 		}
 	}
+}
+
+func (rd *ResourceDescription) filterValues(data *cloudwatch.MetricDataResult) ([]*float64, error) {
+	// In the case of a counter we need to remove any datapoints which have
+	// already been added to the counter, otherwise if the poll intervals
+	// overlap we will double count some data.
+	values := data.Values
+	if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
+		counter, err := counter.GetMetricWith(prometheus.Labels{
+			"name":   *rd.Name,
+			"id":     *rd.ID,
+			"type":   *rd.Type,
+			"region": *rd.Parent.Parent.Region,
+		})
+		if err != nil {
+			return nil, err
+		}
+		rd.Mutex.Lock()
+		defer rd.Mutex.Unlock()
+		if rd.timestamps == nil {
+			rd.timestamps = make(map[prometheus.Collector]*time.Time)
+		}
+		if lastTimestamp, ok := rd.timestamps[counter]; ok == true {
+			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
+		}
+		if len(values) > 0 {
+			// AWS returns the data in descending order
+			rd.timestamps[counter] = data.Timestamps[0]
+		}
+	}
+	return values, nil
 }
 
 func (rd *ResourceDescription) updateMetric(name string, value float64) error {
