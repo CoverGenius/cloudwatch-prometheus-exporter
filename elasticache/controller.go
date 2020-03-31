@@ -5,10 +5,11 @@ import (
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/elasticache"
 	"strings"
 	"sync"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/elasticache"
 )
 
 func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.CacheCluster) error {
@@ -33,6 +34,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.Cache
 	return nil
 }
 
+// CreateResourceList fetches a list of all Elasticache clusters in the parent region
 func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating Elasticache resource list ...")
@@ -51,7 +53,7 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 		go func(cc *elasticache.CacheCluster, wg *sync.WaitGroup) {
 			defer wg.Done()
 			resource := strings.Join([]string{"cluster", *cc.CacheClusterId}, ":")
-			arn, err := nd.Parent.BuildArn(&service, &resource)
+			arn, err := nd.Parent.BuildARN(&service, &resource)
 			h.LogError(err)
 			input := elasticache.ListTagsForResourceInput{
 				ResourceName: aws.String(arn),
