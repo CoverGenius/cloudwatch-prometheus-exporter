@@ -4,7 +4,7 @@
 
 Cloudwatch prometheus exporter with support for multiple regions and counter metrics
 
-./cloudwatch-prometheus-exporter -config </path/to/your/config.yaml>
+`./cloudwatch-prometheus-exporter -config </path/to/your/config.yaml>`
 
 ## Configuration
 
@@ -26,3 +26,5 @@ metrics:
   AWS/S3:
     length: 10080
 ```
+
+[goreportcard]: https://goreportcard.com/report/github.com/CoverGenius/cloudwatch-prometheus-exporter
