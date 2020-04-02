@@ -48,20 +48,21 @@ type DimensionDescription struct {
 
 type metric struct {
 	Data map[string]struct {
-		Length int `yaml:"length,omitempty"`
+		Period int `yaml:"length,omitempty"` // How far back to request data for in minutes.
 	} `yaml:",omitempty,inline"`
 }
 
+// Config represents the exporter configuration passed which is read at runtime from a YAML file.
 type Config struct {
-	Listen       string            `yaml:"listen,omitempty"`
-	APIKey       string            `yaml:"api_key"`
-	APISecret    string            `yaml:"api_secret"`
-	Tags         []*TagDescription `yaml:"tags,omitempty"`
-	Period       uint8             `yaml:"period,omitempty"`
-	Regions      []*string         `yaml:"regions"`
-	PollInterval uint8             `yaml:"poll_interval,omitempty"`
-	LogLevel     uint8             `yaml:"log_level,omitempty"`
-	Metrics      metric            `yaml:"metrics,omitempty"`
+	Listen       string            `yaml:"listen,omitempty"`        // TCP Dial address for Prometheus HTTP API to listen on
+	APIKey       string            `yaml:"api_key"`                 // AWS API Key ID
+	APISecret    string            `yaml:"api_secret"`              // AWS API Secret
+	Tags         []*TagDescription `yaml:"tags,omitempty"`          // Tags to filter resources by
+	Period       uint8             `yaml:"period,omitempty"`        // How far back to request data for in minutes.
+	Regions      []*string         `yaml:"regions"`                 // Which AWS regions to query resources and metrics for
+	PollInterval uint8             `yaml:"poll_interval,omitempty"` // How often to fetch new data from the Cloudwatch API.
+	LogLevel     uint8             `yaml:"log_level,omitempty"`     // Logging verbosity level
+	Metrics      metric            `yaml:"metrics,omitempty"`       // Map of per metric configuration overrides
 }
 
 type Metrics struct {
@@ -504,16 +505,17 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 
 func (rd *ResourceDescription) getData(cw *cloudwatch.CloudWatch) (*cloudwatch.GetMetricDataOutput, error) {
 	rd.BuildQuery()
-	var startTime *time.Time
 
+	startTime := rd.Parent.Parent.Time.StartTime
 	if val, ok := rd.Parent.Parent.Config.Metrics.Data[*rd.Parent.Namespace]; ok {
-		if val.Length > 0 {
-			time := rd.Parent.Parent.Time.EndTime.Add(time.Minute * -time.Duration(val.Length))
+		// Some resources don't have any data for a while (e.g. S3), in these cases the Period parameter
+		// can be used to override the window used when querying the Cloudwatch API.
+		if val.Period > 0 {
+			time := rd.Parent.Parent.Time.EndTime.Add(-time.Duration(val.Period) * time.Minute)
 			startTime = &time
 		}
-	} else {
-		startTime = rd.Parent.Parent.Time.StartTime
 	}
+
 	input := cloudwatch.GetMetricDataInput{
 		StartTime:         startTime,
 		EndTime:           rd.Parent.Parent.Time.EndTime,
