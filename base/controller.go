@@ -54,7 +54,6 @@ type MetricDescription struct {
 	Dimensions []*cloudwatch.Dimension
 	Period     int
 	Statistic  []*string
-	Data       map[string][]*string
 }
 
 // RegionDescription describes an AWS region which will be monitored via cloudwatch

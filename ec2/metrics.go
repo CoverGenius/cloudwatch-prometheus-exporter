@@ -11,7 +11,6 @@ var metrics = map[string]*b.MetricDescription{
 	"CPUCreditBalance": {
 		Help:       aws.String("The number of earned CPU credits that an instance has accrued since it was launched or started"),
 		OutputName: aws.String("ec2_cpu_credit_balance"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -19,7 +18,6 @@ var metrics = map[string]*b.MetricDescription{
 	"CPUCreditUsage": {
 		Help:       aws.String("The number of CPU credits spent by the instance for CPU utilization"),
 		OutputName: aws.String("ec2_cpu_credit_usage"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -27,7 +25,6 @@ var metrics = map[string]*b.MetricDescription{
 	"CPUSurplusCreditBalance": {
 		Help:       aws.String("The number of surplus credits that have been spent by an unlimited instance when its CPUCreditBalance value is zero"),
 		OutputName: aws.String("ec2_cpu_surplus_credit_balance"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -35,7 +32,6 @@ var metrics = map[string]*b.MetricDescription{
 	"CPUSurplusCreditsCharged": {
 		Help:       aws.String("The number of spent surplus credits that are not paid down by earned CPU credits, and which thus incur an additional charge"),
 		OutputName: aws.String("ec2_cpu_surplus_credits_charged"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -43,7 +39,6 @@ var metrics = map[string]*b.MetricDescription{
 	"CPUUtilization": {
 		Help:       aws.String("The percentage of allocated EC2 compute units that are currently in use on the instance"),
 		OutputName: aws.String("ec2_cpu_utilization"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -51,7 +46,6 @@ var metrics = map[string]*b.MetricDescription{
 	"DiskReadBytes": {
 		Help:       aws.String("Bytes read from all instance store volumes available to the instance"),
 		OutputName: aws.String("ec2_disk_read_bytes"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -59,7 +53,6 @@ var metrics = map[string]*b.MetricDescription{
 	"DiskReadOps": {
 		Help:       aws.String("Completed read operations from all instance store volumes available to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_disk_read_ops"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -67,7 +60,6 @@ var metrics = map[string]*b.MetricDescription{
 	"DiskWriteBytes": {
 		Help:       aws.String("Bytes written to all instance store volumes available to the instance"),
 		OutputName: aws.String("ec2_disk_write_bytes"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -75,7 +67,6 @@ var metrics = map[string]*b.MetricDescription{
 	"DiskWriteOps": {
 		Help:       aws.String("Completed write operations to all instance store volumes available to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_disk_write_ops"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -83,7 +74,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSByteBalance": {
 		Help:       aws.String("Available only for the smaller instance sizes. Provides information about the percentage of throughput credits remaining in the burst bucket"),
 		OutputName: aws.String("ec2_ebs_byte_balance"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -91,7 +81,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSIOBalance": {
 		Help:       aws.String("Available only for the smaller instance sizes. Provides information about the percentage of I/O credits remaining in the burst bucket"),
 		OutputName: aws.String("ec2_ebs_io_balance"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -99,7 +88,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSReadBytes": {
 		Help:       aws.String("Bytes read from all EBS volumes attached to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_ebs_read_bytes"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -107,7 +95,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSReadOps": {
 		Help:       aws.String("Completed read operations from all Amazon EBS volumes attached to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_ebs_read_ops"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -115,7 +102,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSWriteBytes": {
 		Help:       aws.String("Bytes written to all EBS volumes attached to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_ebs_write_bytes"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -123,7 +109,6 @@ var metrics = map[string]*b.MetricDescription{
 	"EBSWriteOps": {
 		Help:       aws.String("Completed write operations to all EBS volumes attached to the instance in a specified period of time"),
 		OutputName: aws.String("ec2_ebs_write_ops"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -131,7 +116,6 @@ var metrics = map[string]*b.MetricDescription{
 	"NetworkIn": {
 		Help:       aws.String("The number of bytes received on all network interfaces by the instance"),
 		OutputName: aws.String("ec2_network_in"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -139,7 +123,6 @@ var metrics = map[string]*b.MetricDescription{
 	"NetworkOut": {
 		Help:       aws.String("The number of bytes sent out on all network interfaces by the instance"),
 		OutputName: aws.String("ec2_network_out"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -147,7 +130,6 @@ var metrics = map[string]*b.MetricDescription{
 	"NetworkPacketsIn": {
 		Help:       aws.String("The number of packets received on all network interfaces by the instance"),
 		OutputName: aws.String("ec2_network_packets_in"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -155,7 +137,6 @@ var metrics = map[string]*b.MetricDescription{
 	"NetworkPacketsOut": {
 		Help:       aws.String("The number of packets sent out on all network interfaces by the instance"),
 		OutputName: aws.String("ec2_network_packets_out"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -163,7 +144,6 @@ var metrics = map[string]*b.MetricDescription{
 	"StatusCheckFailed": {
 		Help:       aws.String("Reports whether the instance has passed both the instance status check and the system status check in the last minute"),
 		OutputName: aws.String("ec2_status_check_failed"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -171,7 +151,6 @@ var metrics = map[string]*b.MetricDescription{
 	"StatusCheckFailed_Instance": {
 		Help:       aws.String("Reports whether the instance has passed the instance status check in the last minute"),
 		OutputName: aws.String("ec2_status_check_failed_instance"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
@@ -179,7 +158,6 @@ var metrics = map[string]*b.MetricDescription{
 	"StatusCheckFailed_System": {
 		Help:       aws.String("Reports whether the instance has passed the system status check in the last minute"),
 		OutputName: aws.String("ec2_status_check_failed_system"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     5,
 		Dimensions: []*cloudwatch.Dimension{},
