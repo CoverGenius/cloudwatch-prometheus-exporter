@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.0.9
+Version: 0.0.10
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Apr 06 2020 Andrew Wright <andrew.w@covergenius.com>
+- Don't wait poll interval for the first scrape
 * Tue Mar 31 2020 Andrew Wright <andrew.w@covergenius.com>
 - Automatically determine the metric type based on the metric aggregation used
 * Mon Mar 30 2020 Andrew Wright <andrew.w@covergenius.com>
