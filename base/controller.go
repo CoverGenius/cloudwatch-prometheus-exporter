@@ -24,10 +24,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	results = make(map[string]prometheus.Collector)
-)
-
 // TimeDescription represents an interval with a specific start and finish time
 type TimeDescription struct {
 	StartTime *time.Time
