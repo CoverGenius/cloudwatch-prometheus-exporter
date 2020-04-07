@@ -47,58 +47,60 @@ type BatchGaugeVec struct {
 	mutex   sync.RWMutex
 }
 
+func (bgv *BatchGaugeVec) BatchUpdate(data []*promMetric) {
+	bgv.mutex.Lock()
+	bgv.metrics = data
+	bgv.mutex.Unlock()
+}
+
+func (bgv *BatchGaugeVec) Collect(ch chan<- prometheus.Metric) {
+	bgv.mutex.RLock()
+	for _, m := range bgv.metrics {
+		ch <- prometheus.MustNewConstMetric(
+			bgv.desc, prometheus.GaugeValue, m.value, m.labels...,
+		)
+	}
+	bgv.mutex.RUnlock()
+}
+
+func (bgv *BatchGaugeVec) Describe(ch chan<- *prometheus.Desc) {
+	ch <- bgv.desc
+}
+
+func NewBatchGaugeVec(opts prometheus.Opts, labels []string) *BatchGaugeVec {
+	name := prometheus.BuildFQName(opts.Namespace, opts.Subsystem, opts.Name)
+	return &BatchGaugeVec{
+		desc:    prometheus.NewDesc(name, opts.Help, labels, prometheus.Labels{}),
+		metrics: []*promMetric{},
+	}
+}
+
 type BatchCounterVec struct {
 	c *prometheus.CounterVec
 }
 
-func (mv *BatchGaugeVec) BatchUpdate(data []*promMetric) {
-	mv.mutex.Lock()
-	mv.metrics = data
-	mv.mutex.Unlock()
-}
-
-func (mv *BatchGaugeVec) Collect(ch chan<- prometheus.Metric) {
-	mv.mutex.Lock()
-	for _, m := range mv.metrics {
-		ch <- prometheus.MustNewConstMetric(
-			mv.desc, prometheus.GaugeValue, m.value, m.labels...,
-		)
-	}
-	mv.mutex.Unlock()
-}
-
-func (mv *BatchGaugeVec) Describe(ch chan<- *prometheus.Desc) {
-	ch <- mv.desc
-}
-
-func (c *BatchCounterVec) BatchUpdate(data []*promMetric) {
+func (bcv *BatchCounterVec) BatchUpdate(data []*promMetric) {
 	for _, nm := range data {
-		c.c.WithLabelValues(nm.labels...).Add(nm.value)
+		bcv.c.WithLabelValues(nm.labels...).Add(nm.value)
 	}
 }
 
-func (mv *BatchCounterVec) Collect(ch chan<- prometheus.Metric) {
-	mv.c.Collect(ch)
+func (bcv *BatchCounterVec) Collect(ch chan<- prometheus.Metric) {
+	bcv.c.Collect(ch)
 }
 
-func (mv *BatchCounterVec) Describe(ch chan<- *prometheus.Desc) {
-	mv.c.Describe(ch)
+func (bcv *BatchCounterVec) Describe(ch chan<- *prometheus.Desc) {
+	bcv.c.Describe(ch)
 }
 
-func NewBatchGaugeVec(name string, help string, labels ...string) *BatchGaugeVec {
-	return &BatchGaugeVec{
-		desc:    prometheus.NewDesc(name, help, labels, prometheus.Labels{}),
-		metrics: []*promMetric{},
-	}
-
-}
-
-func NewBatchCounterVec(name string, help string, labels ...string) *BatchCounterVec {
+func NewBatchCounterVec(opts prometheus.Opts, labels []string) *BatchCounterVec {
 	return &BatchCounterVec{
 		c: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: name,
-				Help: help,
+				Name:      opts.Name,
+				Subsystem: opts.Subsystem,
+				Namespace: opts.Namespace,
+				Help:      opts.Help,
 			},
 			labels,
 		),

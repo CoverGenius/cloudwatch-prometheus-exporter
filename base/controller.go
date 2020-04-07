@@ -21,8 +21,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
+
+var alphaRegex, _ = regexp.Compile("[^a-zA-Z0-9]+")
 
 // TagDescription represents an AWS tag key value pair
 type TagDescription struct {
@@ -218,12 +221,10 @@ func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error
 	return nil
 }
 
-// Cloudwatch calls need a snake-case-unique-id
 func (rd *ResourceDescription) queryID(stat string) *string {
+	// Cloudwatch calls need a snake-case-unique-id
 	id := strings.ToLower(*rd.ID + "-" + stat)
-	// TODO handle the error / make this global
-	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
-	id = reg.ReplaceAllString(id, "_")
+	id = alphaRegex.ReplaceAllString(id, "_")
 	return aws.String(id)
 }
 
@@ -329,12 +330,18 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 	}
 	for stat, data := range newData {
 		name := *md.metricName(stat)
+		opts := prometheus.Opts{
+			Name: name,
+			Help: *md.Help,
+		}
+		labels := []string{"name", "id", "type", "region"}
+
 		exporter.mutex.Lock()
 		if _, ok := exporter.data[name+region]; ok == false {
 			if stat == "Sum" {
-				exporter.data[name+region] = NewBatchCounterVec(name, *md.Help, []string{"name", "id", "type", "region"}...)
+				exporter.data[name+region] = NewBatchCounterVec(opts, labels)
 			} else {
-				exporter.data[name+region] = NewBatchGaugeVec(name, *md.Help, []string{"name", "id", "type", "region"}...)
+				exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
 			}
 		}
 		exporter.data[name+region].BatchUpdate(data)
