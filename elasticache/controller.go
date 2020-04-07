@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache"
 )
 
-func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.CacheCluster) error {
+func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.CacheCluster) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -26,11 +26,8 @@ func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.Cache
 	rd.Name = cc.CacheClusterId
 	rd.Type = aws.String("elasticache")
 	rd.Parent = nd
-	nd.Mutex.Lock()
-	nd.Resources = append(nd.Resources, &rd)
-	nd.Mutex.Unlock()
 
-	return nil
+	return &rd, nil
 }
 
 // CreateResourceList fetches a list of all Elasticache clusters in the parent region
@@ -38,7 +35,7 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating Elasticache resource list ...")
 
-	nd.Resources = []*b.ResourceDescription{}
+	resources := []*b.ResourceDescription{}
 	nd.Metrics = GetMetrics()
 	session := elasticache.New(nd.Parent.Session)
 	input := elasticache.DescribeCacheClustersInput{}
@@ -48,6 +45,7 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 
 	var w sync.WaitGroup
 	w.Add(len(result.CacheClusters))
+	ch := make(chan (*b.ResourceDescription), len(result.CacheClusters))
 	for _, cc := range result.CacheClusters {
 		go func(cc *elasticache.CacheCluster, wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -61,11 +59,21 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 			h.LogError(err)
 
 			if nd.Parent.TagsFound(tags) {
-				err := CreateResourceDescription(nd, cc)
+				if r, err := CreateResourceDescription(nd, cc); err == nil {
+					ch <- r
+				}
 				h.LogError(err)
 			}
 		}(cc, &w)
 	}
 	w.Wait()
+	close(ch)
+	for r := range ch {
+		resources = append(resources, r)
+	}
+
+	nd.Mutex.Lock()
+	nd.Resources = resources
+	nd.Mutex.Unlock()
 	return nil
 }

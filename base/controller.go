@@ -198,7 +198,9 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
 	for _, md := range nd.Metrics {
 		go func(md *MetricDescription, ndc chan *NamespaceDescription) {
+			nd.Mutex.RLock()
 			result, err := md.getData(cw, nd.Resources, nd)
+			nd.Mutex.RUnlock()
 			h.LogError(err)
 			md.saveData(result, *nd.Parent.Region)
 			ndc <- nd
