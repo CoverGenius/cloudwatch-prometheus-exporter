@@ -25,12 +25,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// TimeDescription represents an interval with a specific start and finish time
-type TimeDescription struct {
-	StartTime *time.Time
-	EndTime   *time.Time
-}
-
 // TagDescription represents an AWS tag key value pair
 type TagDescription struct {
 	Key   *string `yaml:"name"`
@@ -53,7 +47,7 @@ type MetricDescription struct {
 	Period     int
 	Statistic  []*string
 
-	timestamps map[prometheus.Collector]*time.Time
+	timestamps map[awsLabels]*time.Time
 	mutex      sync.RWMutex
 }
 
@@ -66,7 +60,6 @@ type RegionDescription struct {
 	AccountID  *string
 	Filters    []*ec2.Filter
 	Namespaces map[string]*NamespaceDescription
-	Time       *TimeDescription
 	Mutex      sync.RWMutex
 	Period     *uint8
 }
@@ -194,9 +187,6 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 		// Initialize metric containers if they don't already exist
 		for awsMetric, metric := range namespace.Metrics {
 			metric.AWSMetric = awsMetric
-			for _, stat := range metric.Statistic {
-				metric.initializeMetric(*stat)
-			}
 		}
 		go namespace.GatherMetrics(cw, ndc)
 	}
@@ -208,40 +198,9 @@ func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc cha
 		go func(md *MetricDescription, ndc chan *NamespaceDescription) {
 			result, err := md.getData(cw, nd.Resources, nd)
 			h.LogError(err)
-			md.saveData(result)
+			md.saveData(result, *nd.Parent.Region)
 			ndc <- nd
 		}(md, ndc)
-	}
-}
-
-func (md *MetricDescription) initializeMetric(stat string) {
-	name := *md.metricName(stat)
-	if _, ok := results[name]; ok == true {
-		// metric is already initialized
-		return
-	}
-
-	var promMetric prometheus.Collector
-	if stat == "Sum" || stat == "SampleCount" {
-		promMetric = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: name,
-				Help: *md.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	} else {
-		promMetric = prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: name,
-				Help: *md.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	}
-	results[name] = promMetric
-	if err := prometheus.Register(promMetric); err != nil {
-		log.Fatalf("Error registering metric %s: %s", name, err)
 	}
 }
 
@@ -307,6 +266,7 @@ type awsLabels struct {
 }
 
 func (l *awsLabels) String() string {
+	// TODO we can remove region
 	return fmt.Sprintf("%s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region)
 }
 
@@ -325,7 +285,12 @@ func awsLabelsFromString(s string) (*awsLabels, error) {
 	return &labels, nil
 }
 
-func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
+func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region string) {
+	newData := map[string][]*promMetric{}
+	for _, stat := range md.Statistic {
+		// pre-allocate in case the last resource for a stat goes away
+		newData[*stat] = []*promMetric{}
+	}
 	for _, data := range c.MetricDataResults {
 		if len(data.Values) <= 0 {
 			continue
@@ -337,16 +302,8 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
 			continue
 		}
 
-		promLabels := prometheus.Labels{
-			"name":   labels.name,
-			"id":     labels.id,
-			"type":   labels.rType,
-			"region": labels.region,
-		}
-
-		values, err := md.filterValues(*md.metricName(labels.statistic), data, &promLabels)
-		if len(values) <= 0 || err != nil {
-			h.LogError(err)
+		values := md.filterValues(data, labels)
+		if len(values) <= 0 {
 			continue
 		}
 
@@ -370,56 +327,43 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
 			continue
 		}
 
-		err = md.updateMetric(*md.metricName(labels.statistic), value, &promLabels)
-		if err != nil {
-			h.LogError(err)
-			continue
+		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region}})
+	}
+	for stat, data := range newData {
+		name := *md.metricName(stat)
+		exporter.mutex.Lock()
+		if _, ok := exporter.data[name+region]; ok == false {
+			vt := prometheus.GaugeValue
+			if stat == "Sum" {
+				vt = prometheus.CounterValue
+			}
+			exporter.data[name+region] = newPromMetric(name, *md.Help, vt, []string{"name", "id", "type", "region"}...)
 		}
+		exporter.data[name+region].Update(data)
+		exporter.mutex.Unlock()
 	}
 }
 
-func (md *MetricDescription) filterValues(name string, data *cloudwatch.MetricDataResult, labels *prometheus.Labels) ([]*float64, error) {
+func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, labels *awsLabels) []*float64 {
 	// In the case of a counter we need to remove any datapoints which have
 	// already been added to the counter, otherwise if the poll intervals
 	// overlap we will double count some data.
 	values := data.Values
-	if counter, ok := results[name].(*prometheus.CounterVec); ok == true {
-		counter, err := counter.GetMetricWith(*labels)
-		if err != nil {
-			return nil, err
-		}
+	if labels.statistic == "Sum" {
 		md.mutex.Lock()
 		defer md.mutex.Unlock()
 		if md.timestamps == nil {
-			md.timestamps = make(map[prometheus.Collector]*time.Time)
+			md.timestamps = make(map[awsLabels]*time.Time)
 		}
-		if lastTimestamp, ok := md.timestamps[counter]; ok == true {
+		if lastTimestamp, ok := md.timestamps[*labels]; ok == true {
 			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
 		}
 		if len(values) > 0 {
 			// AWS returns the data in descending order
-			md.timestamps[counter] = data.Timestamps[0]
+			md.timestamps[*labels] = data.Timestamps[0]
 		}
 	}
-	return values, nil
-}
-
-func (md *MetricDescription) updateMetric(name string, value float64, labels *prometheus.Labels) error {
-	md.mutex.Lock()
-	defer md.mutex.Unlock()
-	if metric, ok := results[name]; ok == true {
-		switch m := metric.(type) {
-		case *prometheus.GaugeVec:
-			m.With(*labels).Set(value)
-		case *prometheus.CounterVec:
-			m.With(*labels).Add(value)
-		default:
-			return fmt.Errorf("Could not resolve type of metric %s", name)
-		}
-	} else {
-		return fmt.Errorf("Couldn't save metric %s", name)
-	}
-	return nil
+	return values
 }
 
 func (rd *RegionDescription) TagsFound(tl interface{}) bool {
