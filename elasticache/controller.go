@@ -26,7 +26,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, cc *elasticache.Cache
 	rd.Name = cc.CacheClusterId
 	rd.Type = aws.String("elasticache")
 	rd.Parent = nd
-	rd.BuildQuery()
 	nd.Mutex.Lock()
 	nd.Resources = append(nd.Resources, &rd)
 	nd.Mutex.Unlock()

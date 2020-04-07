@@ -34,7 +34,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	}
 	rd.Type = aws.String("ec2")
 	rd.Parent = nd
-	rd.BuildQuery()
 	nd.Resources = append(nd.Resources, &rd)
 
 	return nil

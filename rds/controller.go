@@ -25,7 +25,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, dbi *rds.DBInstance) 
 	rd.Name = dbi.DBInstanceIdentifier
 	rd.Type = aws.String("rds")
 	rd.Parent = nd
-	rd.BuildQuery()
 	nd.Mutex.Lock()
 	nd.Resources = append(nd.Resources, &rd)
 	nd.Mutex.Unlock()

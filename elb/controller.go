@@ -25,7 +25,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescriptio
 	rd.Name = td.LoadBalancerName
 	rd.Type = aws.String("lb-classic")
 	rd.Parent = nd
-	rd.BuildQuery()
 	nd.Resources = append(nd.Resources, &rd)
 
 	return nil
