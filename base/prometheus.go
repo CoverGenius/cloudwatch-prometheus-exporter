@@ -7,25 +7,33 @@ import (
 )
 
 var (
-	results  = make(map[string]prometheus.Collector)
-	exporter = Exporter{data: make(map[string]*promMetricVec)}
+	exporter = Exporter{data: make(map[string]BatchCollector)}
 )
 
 func init() {
 	prometheus.MustRegister(&exporter)
 }
 
+type BatchCollector interface {
+	prometheus.Collector
+	BatchUpdate([]*promMetric)
+}
+
 type Exporter struct {
-	data  map[string]*promMetricVec
+	data  map[string]BatchCollector
 	mutex sync.RWMutex
 }
 
-type promMetricVec struct {
-	desc      *prometheus.Desc
-	valueType prometheus.ValueType
-	metrics   []*promMetric
-	counter   *prometheus.CounterVec
-	mutex     sync.RWMutex
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	for _, mv := range e.data {
+		mv.Collect(ch)
+	}
+}
+
+func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+	for _, mv := range e.data {
+		mv.Describe(ch)
+	}
 }
 
 type promMetric struct {
@@ -33,56 +41,67 @@ type promMetric struct {
 	labels []string
 }
 
-func newPromMetric(name string, help string, vt prometheus.ValueType, labels ...string) *promMetricVec {
-	var counter *prometheus.CounterVec
-	if vt == prometheus.CounterValue {
-		counter = prometheus.NewCounterVec(
+type BatchGaugeVec struct {
+	desc    *prometheus.Desc
+	metrics []*promMetric
+	mutex   sync.RWMutex
+}
+
+type BatchCounterVec struct {
+	c *prometheus.CounterVec
+}
+
+func (mv *BatchGaugeVec) BatchUpdate(data []*promMetric) {
+	mv.mutex.Lock()
+	mv.metrics = data
+	mv.mutex.Unlock()
+}
+
+func (mv *BatchGaugeVec) Collect(ch chan<- prometheus.Metric) {
+	mv.mutex.Lock()
+	for _, m := range mv.metrics {
+		ch <- prometheus.MustNewConstMetric(
+			mv.desc, prometheus.GaugeValue, m.value, m.labels...,
+		)
+	}
+	mv.mutex.Unlock()
+}
+
+func (mv *BatchGaugeVec) Describe(ch chan<- *prometheus.Desc) {
+	ch <- mv.desc
+}
+
+func (c *BatchCounterVec) BatchUpdate(data []*promMetric) {
+	for _, nm := range data {
+		c.c.WithLabelValues(nm.labels...).Add(nm.value)
+	}
+}
+
+func (mv *BatchCounterVec) Collect(ch chan<- prometheus.Metric) {
+	mv.c.Collect(ch)
+}
+
+func (mv *BatchCounterVec) Describe(ch chan<- *prometheus.Desc) {
+	mv.c.Describe(ch)
+}
+
+func NewBatchGaugeVec(name string, help string, labels ...string) *BatchGaugeVec {
+	return &BatchGaugeVec{
+		desc:    prometheus.NewDesc(name, help, labels, prometheus.Labels{}),
+		metrics: []*promMetric{},
+	}
+
+}
+
+func NewBatchCounterVec(name string, help string, labels ...string) *BatchCounterVec {
+	return &BatchCounterVec{
+		c: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: name,
 				Help: help,
 			},
 			labels,
-		)
+		),
 	}
-	return &promMetricVec{
-		desc:      prometheus.NewDesc(name, help, labels, prometheus.Labels{}),
-		valueType: vt,
-		metrics:   []*promMetric{},
-		counter:   counter,
-	}
-}
 
-func (m *promMetricVec) Update(new []*promMetric) {
-	// TODO do multiple regions work???
-	if m.valueType == prometheus.GaugeValue {
-		m.mutex.Lock()
-		m.metrics = new
-		m.mutex.Unlock()
-	} else {
-		for _, nm := range new {
-			m.counter.WithLabelValues(nm.labels...).Add(nm.value)
-		}
-	}
-}
-
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	for _, mv := range e.data {
-		if mv.valueType == prometheus.GaugeValue {
-			mv.mutex.Lock()
-			for _, m := range mv.metrics {
-				ch <- prometheus.MustNewConstMetric(
-					mv.desc, mv.valueType, m.value, m.labels...,
-				)
-			}
-			mv.mutex.Unlock()
-		} else {
-			mv.counter.Collect(ch)
-		}
-	}
-}
-
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-	for _, mv := range e.data {
-		ch <- mv.desc
-	}
 }

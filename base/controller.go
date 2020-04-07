@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -266,7 +265,6 @@ type awsLabels struct {
 }
 
 func (l *awsLabels) String() string {
-	// TODO we can remove region
 	return fmt.Sprintf("%s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region)
 }
 
@@ -333,13 +331,13 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		name := *md.metricName(stat)
 		exporter.mutex.Lock()
 		if _, ok := exporter.data[name+region]; ok == false {
-			vt := prometheus.GaugeValue
 			if stat == "Sum" {
-				vt = prometheus.CounterValue
+				exporter.data[name+region] = NewBatchCounterVec(name, *md.Help, []string{"name", "id", "type", "region"}...)
+			} else {
+				exporter.data[name+region] = NewBatchGaugeVec(name, *md.Help, []string{"name", "id", "type", "region"}...)
 			}
-			exporter.data[name+region] = newPromMetric(name, *md.Help, vt, []string{"name", "id", "type", "region"}...)
 		}
-		exporter.data[name+region].Update(data)
+		exporter.data[name+region].BatchUpdate(data)
 		exporter.mutex.Unlock()
 	}
 }

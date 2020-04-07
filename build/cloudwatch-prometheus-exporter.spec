@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.0.10
+Version: 0.0.11
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
