@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Apr 08 2020 Andrew Wright <andrew.w@covergenius.com>
+- Don't persist gauge metrics in between scrapes
 * Mon Apr 06 2020 Andrew Wright <andrew.w@covergenius.com>
 - Don't wait poll interval for the first scrape
 * Tue Mar 31 2020 Andrew Wright <andrew.w@covergenius.com>
