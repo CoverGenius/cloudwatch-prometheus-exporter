@@ -2,6 +2,7 @@ package base
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,15 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	results = make(map[string]prometheus.Collector)
-)
-
-// TimeDescription represents an interval with a specific start and finish time
-type TimeDescription struct {
-	StartTime *time.Time
-	EndTime   *time.Time
-}
+var alphaRegex, _ = regexp.Compile("[^a-zA-Z0-9]+")
 
 // TagDescription represents an AWS tag key value pair
 type TagDescription struct {
@@ -49,12 +42,15 @@ type DimensionDescription struct {
 // MetricDescription describes a single Cloudwatch metric with one or more
 // statistics to be monitored for relevant resources
 type MetricDescription struct {
+	AWSMetric  string
 	Help       *string
 	OutputName *string
 	Dimensions []*cloudwatch.Dimension
 	Period     int
 	Statistic  []*string
-	Data       map[string][]*string
+
+	timestamps map[awsLabels]*time.Time
+	mutex      sync.RWMutex
 }
 
 // RegionDescription describes an AWS region which will be monitored via cloudwatch
@@ -66,7 +62,6 @@ type RegionDescription struct {
 	AccountID  *string
 	Filters    []*ec2.Filter
 	Namespaces map[string]*NamespaceDescription
-	Time       *TimeDescription
 	Mutex      sync.RWMutex
 	Period     *uint8
 }
@@ -91,7 +86,6 @@ type ResourceDescription struct {
 	Parent     *NamespaceDescription
 	Mutex      sync.RWMutex
 	Query      []*cloudwatch.MetricDataQuery
-	timestamps map[prometheus.Collector]*time.Time
 }
 
 func (md *MetricDescription) metricName(stat string) *string {
@@ -111,17 +105,6 @@ func (md *MetricDescription) metricName(stat string) *string {
 	}
 	name := *md.OutputName + suffix
 	return &name
-}
-
-func (rd *RegionDescription) setRequestTime() error {
-	log.Debug("Setting request time ...")
-	td := TimeDescription{}
-	t := time.Now().Round(time.Minute * 5)
-	start := t.Add(time.Minute * -time.Duration(*rd.Period))
-	td.StartTime = &start
-	td.EndTime = &t
-	rd.Time = &td
-	return nil
 }
 
 // BuildARN returns the AWS ARN of a resource in a region given the input service and resource
@@ -200,15 +183,12 @@ func (rd *RegionDescription) CreateNamespaceDescriptions() error {
 // GatherMetrics queries the Cloudwatch API for metrics related to the resources in this region
 func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	log.Infof("Gathering metrics for region %s...", *rd.Region)
-	rd.setRequestTime()
 
 	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
 		// Initialize metric containers if they don't already exist
-		for _, metric := range namespace.Metrics {
-			for _, stat := range metric.Statistic {
-				metric.initializeMetric(*stat)
-			}
+		for awsMetric, metric := range namespace.Metrics {
+			metric.AWSMetric = awsMetric
 		}
 		go namespace.GatherMetrics(cw, ndc)
 	}
@@ -216,46 +196,15 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 
 // GatherMetrics queries the Cloudwatch API for metrics related to this AWS namespace in the parent region
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
-	for _, r := range nd.Resources {
-		resource := r
-		go func(rd *ResourceDescription, ndc chan *NamespaceDescription) {
-			resource.Parent = nd
-			result, err := resource.getData(cw)
+	for _, md := range nd.Metrics {
+		go func(md *MetricDescription, ndc chan *NamespaceDescription) {
+			nd.Mutex.RLock()
+			result, err := md.getData(cw, nd.Resources, nd)
+			nd.Mutex.RUnlock()
 			h.LogError(err)
-			resource.saveData(result)
+			md.saveData(result, *nd.Parent.Region)
 			ndc <- nd
-		}(resource, ndc)
-	}
-}
-
-func (md *MetricDescription) initializeMetric(stat string) {
-	name := *md.metricName(stat)
-	if _, ok := results[name]; ok == true {
-		// metric is already initialized
-		return
-	}
-
-	var promMetric prometheus.Collector
-	if stat == "Sum" || stat == "SampleCount" {
-		promMetric = prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: name,
-				Help: *md.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	} else {
-		promMetric = prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: name,
-				Help: *md.Help,
-			},
-			[]string{"name", "id", "type", "region"},
-		)
-	}
-	results[name] = promMetric
-	if err := prometheus.Register(promMetric); err != nil {
-		log.Fatalf("Error registering metric %s: %s", name, err)
+		}(md, ndc)
 	}
 }
 
@@ -274,73 +223,88 @@ func (rd *ResourceDescription) BuildDimensions(dd []*DimensionDescription) error
 	return nil
 }
 
+func (rd *ResourceDescription) queryID(stat string) *string {
+	// Cloudwatch calls need a snake-case-unique-id
+	id := strings.ToLower(*rd.ID + "-" + stat)
+	id = alphaRegex.ReplaceAllString(id, "_")
+	return aws.String(id)
+}
+
 // BuildQuery constructs and saves the cloudwatch query for all the metrics associated with the resource
-func (rd *ResourceDescription) BuildQuery() error {
+func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwatch.MetricDataQuery, error) {
 	query := []*cloudwatch.MetricDataQuery{}
-	for key, value := range rd.Parent.Metrics {
+	for _, rd := range rds {
 		dimensions := rd.Dimensions
-		dimensions = append(dimensions, value.Dimensions...)
-		for _, stat := range value.Statistic {
+		dimensions = append(dimensions, md.Dimensions...)
+		for _, stat := range md.Statistic {
 			cm := &cloudwatch.MetricDataQuery{
-				Id: value.metricName(*stat),
+				Id: rd.queryID(*stat),
 				MetricStat: &cloudwatch.MetricStat{
 					Metric: &cloudwatch.Metric{
-						MetricName: aws.String(key),
+						MetricName: &md.AWSMetric,
 						Namespace:  rd.Parent.Namespace,
 						Dimensions: dimensions,
 					},
 					Stat:   stat,
-					Period: aws.Int64(int64(value.Period)),
+					Period: aws.Int64(int64(md.Period)),
 				},
 				// We hardcode the label so that we can rely on the ordering in
 				// saveData.
-				Label:      aws.String((&awsLabels{key, *stat}).String()),
+				Label:      aws.String((&awsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region}).String()),
 				ReturnData: aws.Bool(true),
 			}
 			query = append(query, cm)
 		}
 	}
-	rd.Query = query
-
-	return nil
+	return query, nil
 }
 
 type awsLabels struct {
-	metric    string
 	statistic string
+	name      string
+	id        string
+	rType     string
+	region    string
 }
 
 func (l *awsLabels) String() string {
-	return fmt.Sprintf("%s %s", l.metric, l.statistic)
+	return fmt.Sprintf("%s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region)
 }
 
 func awsLabelsFromString(s string) (*awsLabels, error) {
 	stringLabels := strings.Split(s, " ")
-	if len(stringLabels) < 2 {
-		return nil, fmt.Errorf("Expected at least two labels, got %s", s)
+	if len(stringLabels) < 5 {
+		return nil, fmt.Errorf("Expected at least five labels, got %s", s)
 	}
 	labels := awsLabels{
-		metric:    stringLabels[len(stringLabels)-2],
-		statistic: stringLabels[len(stringLabels)-1],
+		statistic: stringLabels[len(stringLabels)-5],
+		name:      stringLabels[len(stringLabels)-4],
+		id:        stringLabels[len(stringLabels)-3],
+		rType:     stringLabels[len(stringLabels)-2],
+		region:    stringLabels[len(stringLabels)-1],
 	}
 	return &labels, nil
 }
 
-func (rd *ResourceDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
+func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region string) {
+	newData := map[string][]*promMetric{}
+	for _, stat := range md.Statistic {
+		// pre-allocate in case the last resource for a stat goes away
+		newData[*stat] = []*promMetric{}
+	}
 	for _, data := range c.MetricDataResults {
 		if len(data.Values) <= 0 {
-			continue
-		}
-
-		values, err := rd.filterValues(data)
-		if len(values) <= 0 || err != nil {
-			h.LogError(err)
 			continue
 		}
 
 		labels, err := awsLabelsFromString(*data.Label)
 		if err != nil {
 			h.LogError(err)
+			continue
+		}
+
+		values := md.filterValues(data, labels)
+		if len(values) <= 0 {
 			continue
 		}
 
@@ -364,67 +328,52 @@ func (rd *ResourceDescription) saveData(c *cloudwatch.GetMetricDataOutput) {
 			continue
 		}
 
-		err = rd.updateMetric(*data.Id, value)
-		if err != nil {
-			h.LogError(err)
-			continue
+		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region}})
+	}
+	for stat, data := range newData {
+		name := *md.metricName(stat)
+		opts := prometheus.Opts{
+			Name: name,
+			Help: *md.Help,
 		}
+		labels := []string{"name", "id", "type", "region"}
+
+		exporter.mutex.Lock()
+		if _, ok := exporter.data[name+region]; ok == false {
+			if stat == "Sum" {
+				exporter.data[name+region] = NewBatchCounterVec(opts, labels)
+			} else {
+				exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
+			}
+		}
+		exporter.mutex.Unlock()
+
+		exporter.mutex.RLock()
+		exporter.data[name+region].BatchUpdate(data)
+		exporter.mutex.RUnlock()
 	}
 }
 
-func (rd *ResourceDescription) filterValues(data *cloudwatch.MetricDataResult) ([]*float64, error) {
+func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, labels *awsLabels) []*float64 {
 	// In the case of a counter we need to remove any datapoints which have
 	// already been added to the counter, otherwise if the poll intervals
 	// overlap we will double count some data.
 	values := data.Values
-	if counter, ok := results[*data.Id].(*prometheus.CounterVec); ok == true {
-		counter, err := counter.GetMetricWith(prometheus.Labels{
-			"name":   *rd.Name,
-			"id":     *rd.ID,
-			"type":   *rd.Type,
-			"region": *rd.Parent.Parent.Region,
-		})
-		if err != nil {
-			return nil, err
+	if labels.statistic == "Sum" {
+		md.mutex.Lock()
+		defer md.mutex.Unlock()
+		if md.timestamps == nil {
+			md.timestamps = make(map[awsLabels]*time.Time)
 		}
-		rd.Mutex.Lock()
-		defer rd.Mutex.Unlock()
-		if rd.timestamps == nil {
-			rd.timestamps = make(map[prometheus.Collector]*time.Time)
-		}
-		if lastTimestamp, ok := rd.timestamps[counter]; ok == true {
+		if lastTimestamp, ok := md.timestamps[*labels]; ok == true {
 			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
 		}
 		if len(values) > 0 {
 			// AWS returns the data in descending order
-			rd.timestamps[counter] = data.Timestamps[0]
+			md.timestamps[*labels] = data.Timestamps[0]
 		}
 	}
-	return values, nil
-}
-
-func (rd *ResourceDescription) updateMetric(name string, value float64) error {
-	labels := prometheus.Labels{
-		"name":   *rd.Name,
-		"id":     *rd.ID,
-		"type":   *rd.Type,
-		"region": *rd.Parent.Parent.Region,
-	}
-	rd.Parent.Parent.Mutex.Lock()
-	defer rd.Parent.Parent.Mutex.Unlock()
-	if metric, ok := results[name]; ok == true {
-		switch m := metric.(type) {
-		case *prometheus.GaugeVec:
-			m.With(labels).Set(value)
-		case *prometheus.CounterVec:
-			m.With(labels).Add(value)
-		default:
-			return fmt.Errorf("Could not resolve type of metric %s", name)
-		}
-	} else {
-		return fmt.Errorf("Couldn't save metric %s", name)
-	}
-	return nil
+	return values
 }
 
 func (rd *RegionDescription) TagsFound(tl interface{}) bool {
@@ -503,23 +452,29 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 	return false
 }
 
-func (rd *ResourceDescription) getData(cw *cloudwatch.CloudWatch) (*cloudwatch.GetMetricDataOutput, error) {
-	rd.BuildQuery()
+func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription, nd *NamespaceDescription) (*cloudwatch.GetMetricDataOutput, error) {
+	query, err := md.BuildQuery(rds)
+	if len(query) < 1 {
+		return &cloudwatch.GetMetricDataOutput{}, nil
+	}
+	h.LogError(err)
 
-	startTime := rd.Parent.Parent.Time.StartTime
-	if val, ok := rd.Parent.Parent.Config.Metrics.Data[*rd.Parent.Namespace]; ok {
+	queryRange := time.Duration(md.Period) * time.Minute
+	if val, ok := nd.Parent.Config.Metrics.Data[*nd.Namespace]; ok {
 		// Some resources don't have any data for a while (e.g. S3), in these cases the Period parameter
 		// can be used to override the window used when querying the Cloudwatch API.
 		if val.Period > 0 {
-			time := rd.Parent.Parent.Time.EndTime.Add(-time.Duration(val.Period) * time.Minute)
-			startTime = &time
+			queryRange = time.Duration(val.Period) * time.Minute
 		}
 	}
 
+	end := time.Now().Round(5 * time.Minute)
+	start := end.Add(-queryRange)
+
 	input := cloudwatch.GetMetricDataInput{
-		StartTime:         startTime,
-		EndTime:           rd.Parent.Parent.Time.EndTime,
-		MetricDataQueries: rd.Query,
+		StartTime:         &start,
+		EndTime:           &end,
+		MetricDataQueries: query,
 	}
 	result, err := cw.GetMetricData(&input)
 	h.LogError(err)

@@ -28,7 +28,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) er
 	rd.Name = bucket.Name
 	rd.Type = aws.String("s3")
 	rd.Parent = nd
-	rd.BuildQuery()
 	nd.Mutex.Lock()
 	nd.Resources = append(nd.Resources, &rd)
 	nd.Mutex.Unlock()

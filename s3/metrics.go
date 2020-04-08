@@ -11,7 +11,6 @@ var metrics = map[string]*b.MetricDescription{
 	"BucketSizeBytes": {
 		Help:       aws.String("The amount of data in bytes stored in a bucket in the STANDARD storage class, INTELLIGENT_TIERING storage class, Standard - Infrequent Access (STANDARD_IA) storage class, OneZone - Infrequent Access (ONEZONE_IA), Reduced Redundancy Storage (RRS) class, Deep Archive Storage (DEEP_ARCHIVE) class or, Glacier (GLACIER) storage class"),
 		OutputName: aws.String("s3_bucket_size_bytes"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     1440,
 		Dimensions: []*cloudwatch.Dimension{
@@ -24,7 +23,6 @@ var metrics = map[string]*b.MetricDescription{
 	"NumberOfObjects": {
 		Help:       aws.String("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
 		OutputName: aws.String("s3_number_of_objects"),
-		Data:       map[string][]*string{},
 		Statistic:  h.StringPointers("Average"),
 		Period:     1440,
 		Dimensions: []*cloudwatch.Dimension{
