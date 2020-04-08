@@ -346,8 +346,11 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 				exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
 			}
 		}
-		exporter.data[name+region].BatchUpdate(data)
 		exporter.mutex.Unlock()
+
+		exporter.mutex.RLock()
+		exporter.data[name+region].BatchUpdate(data)
+		exporter.mutex.RUnlock()
 	}
 }
 

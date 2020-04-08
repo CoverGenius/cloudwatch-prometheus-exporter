@@ -14,20 +14,25 @@ func init() {
 	prometheus.MustRegister(&exporter)
 }
 
+// BatchCollector is a prometheus.Collector which allows a metric to be
+// atomically updated with multiple label combinations at once
 type BatchCollector interface {
 	prometheus.Collector
 	BatchUpdate([]*promMetric)
 }
 
+// Exporter implements prometheus.Collector
 type Exporter struct {
 	data  map[string]BatchCollector
 	mutex sync.RWMutex
 }
 
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	e.mutex.RLock()
 	for _, mv := range e.data {
 		mv.Collect(ch)
 	}
+	e.mutex.RUnlock()
 }
 
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
