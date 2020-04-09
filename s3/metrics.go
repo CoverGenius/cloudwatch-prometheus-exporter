@@ -7,12 +7,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-var metrics = map[string]*b.MetricDescription{
+// Metrics is a map of default MetricDescriptions for this namespace
+var Metrics = map[string]*b.MetricDescription{
 	"BucketSizeBytes": {
-		Help:       aws.String("The amount of data in bytes stored in a bucket in the STANDARD storage class, INTELLIGENT_TIERING storage class, Standard - Infrequent Access (STANDARD_IA) storage class, OneZone - Infrequent Access (ONEZONE_IA), Reduced Redundancy Storage (RRS) class, Deep Archive Storage (DEEP_ARCHIVE) class or, Glacier (GLACIER) storage class"),
-		OutputName: aws.String("s3_bucket_size_bytes"),
-		Statistic:  h.StringPointers("Average"),
-		Period:     1440,
+		Help:          aws.String("The amount of data in bytes stored in a bucket in the STANDARD storage class, INTELLIGENT_TIERING storage class, Standard - Infrequent Access (STANDARD_IA) storage class, OneZone - Infrequent Access (ONEZONE_IA), Reduced Redundancy Storage (RRS) class, Deep Archive Storage (DEEP_ARCHIVE) class or, Glacier (GLACIER) storage class"),
+		OutputName:    aws.String("s3_bucket_size_bytes"),
+		Statistic:     h.StringPointers("Average"),
+		PeriodSeconds: 24 * 60 * 60,
+		RangeSeconds:  24 * 60 * 60 * 7,
 		Dimensions: []*cloudwatch.Dimension{
 			{
 				Name:  aws.String("StorageType"),
@@ -21,10 +23,11 @@ var metrics = map[string]*b.MetricDescription{
 		},
 	},
 	"NumberOfObjects": {
-		Help:       aws.String("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
-		OutputName: aws.String("s3_number_of_objects"),
-		Statistic:  h.StringPointers("Average"),
-		Period:     1440,
+		Help:          aws.String("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
+		OutputName:    aws.String("s3_number_of_objects"),
+		Statistic:     h.StringPointers("Average"),
+		PeriodSeconds: 24 * 60 * 60,
+		RangeSeconds:  24 * 60 * 60 * 7,
 		Dimensions: []*cloudwatch.Dimension{
 			{
 				Name:  aws.String("StorageType"),
@@ -32,9 +35,4 @@ var metrics = map[string]*b.MetricDescription{
 			},
 		},
 	},
-}
-
-// GetMetrics returns a map of MetricDescriptions to be exported for this namespace
-func GetMetrics() map[string]*b.MetricDescription {
-	return metrics
 }

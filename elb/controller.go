@@ -35,7 +35,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating Classic LB resource list ...")
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := elb.New(nd.Parent.Session)
 	input := elb.DescribeLoadBalancersInput{}
 	result, err := session.DescribeLoadBalancers(&input)

@@ -45,7 +45,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	log.Debug("Creating EC2 resource list ...")
 
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := ec2.New(nd.Parent.Session)
 	input := ec2.DescribeInstancesInput{
 		Filters: nd.Parent.Filters,

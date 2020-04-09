@@ -43,7 +43,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := s3.New(nd.Parent.Session)
 	input := s3.ListBucketsInput{}
 	result, err := session.ListBuckets(&input)

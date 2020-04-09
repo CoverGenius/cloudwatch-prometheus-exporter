@@ -7,9 +7,18 @@ api_secret: <API_SECRET>
 tags:
   - name: Environment
     value: production
-period: 5
-poll_interval: 1
+period_seconds: 300
+range_seconds: 300
+poll_interval: 60
 log_level: 4
 metrics:
+  AWS/RDS:
+      - metric: CPUCreditBalance
+        dimensions: []
+        statistics: [Average, Sum]
+      - metric: WriteIOPS
+        dimensions: []
+        statistics: [Average, Sum]
   AWS/S3:
-    length: 10080
+  AWS/NetworkELB:
+  AWS/EC2:

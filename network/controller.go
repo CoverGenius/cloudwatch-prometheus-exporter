@@ -35,7 +35,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating NatGateway resource list ...")
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := ec2.New(nd.Parent.Session)
 	input := ec2.DescribeNatGatewaysInput{
 		Filter: nd.Parent.Filters,

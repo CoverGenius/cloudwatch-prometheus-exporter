@@ -42,12 +42,14 @@ type DimensionDescription struct {
 // MetricDescription describes a single Cloudwatch metric with one or more
 // statistics to be monitored for relevant resources
 type MetricDescription struct {
-	AWSMetric  string
-	Help       *string
-	OutputName *string
-	Dimensions []*cloudwatch.Dimension
-	Period     int
-	Statistic  []*string
+	AWSMetric     string
+	Namespace     string
+	Help          *string
+	OutputName    *string
+	Dimensions    []*cloudwatch.Dimension
+	PeriodSeconds int64
+	RangeSeconds  int64
+	Statistic     []*string
 
 	timestamps map[awsLabels]*time.Time
 	mutex      sync.RWMutex
@@ -63,7 +65,6 @@ type RegionDescription struct {
 	Filters    []*ec2.Filter
 	Namespaces map[string]*NamespaceDescription
 	Mutex      sync.RWMutex
-	Period     *uint8
 }
 
 // NamespaceDescription describes an AWS namespace to be monitored via cloudwatch
@@ -73,7 +74,7 @@ type NamespaceDescription struct {
 	Resources []*ResourceDescription
 	Parent    *RegionDescription
 	Mutex     sync.RWMutex
-	Metrics   map[string]*MetricDescription
+	Metrics   []*MetricDescription
 }
 
 // ResourceDescription describes a single AWS resource which will be monitored via
@@ -146,12 +147,10 @@ func (rd *RegionDescription) saveAccountID() error {
 
 // Init initializes a region and its nested namspaces in preparation for collection
 // cloudwatchc metrics for that region.
-func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, r *string, p *uint8) error {
-	log.Infof("Initializing region %s ...", *r)
-	rd.Period = p
+func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, metrics map[string][]*MetricDescription) error {
+	log.Infof("Initializing region %s ...", *rd.Region)
 	rd.Session = s
 	rd.Tags = td
-	rd.Region = r
 
 	err := rd.saveAccountID()
 	h.LogErrorExit(err)
@@ -159,20 +158,23 @@ func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, r *s
 	err = rd.buildFilters()
 	h.LogErrorExit(err)
 
-	err = rd.CreateNamespaceDescriptions()
+	err = rd.CreateNamespaceDescriptions(metrics)
 	h.LogErrorExit(err)
 
 	return nil
 }
 
 // CreateNamespaceDescriptions populates the list of NamespaceDescriptions for an AWS region
-func (rd *RegionDescription) CreateNamespaceDescriptions() error {
+func (rd *RegionDescription) CreateNamespaceDescriptions(metrics map[string][]*MetricDescription) error {
 	namespaces := GetNamespaces()
 	rd.Namespaces = make(map[string]*NamespaceDescription)
 	for _, namespace := range namespaces {
 		nd := NamespaceDescription{
 			Namespace: aws.String(namespace),
 			Parent:    rd,
+		}
+		if mds, ok := metrics[namespace]; ok {
+			nd.Metrics = mds
 		}
 		rd.Namespaces[namespace] = &nd
 	}
@@ -185,10 +187,6 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	log.Infof("Gathering metrics for region %s...", *rd.Region)
 
 	for _, namespace := range rd.Namespaces {
-		// Initialize metric containers if they don't already exist
-		for awsMetric, metric := range namespace.Metrics {
-			metric.AWSMetric = awsMetric
-		}
 		go namespace.GatherMetrics(cw)
 	}
 }
@@ -244,7 +242,7 @@ func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwat
 						Dimensions: dimensions,
 					},
 					Stat:   stat,
-					Period: aws.Int64(int64(md.Period)),
+					Period: aws.Int64(md.PeriodSeconds),
 				},
 				// We hardcode the label so that we can rely on the ordering in
 				// saveData.
@@ -272,7 +270,7 @@ func (l *awsLabels) String() string {
 func awsLabelsFromString(s string) (*awsLabels, error) {
 	stringLabels := strings.Split(s, " ")
 	if len(stringLabels) < 5 {
-		return nil, fmt.Errorf("Expected at least five labels, got %s", s)
+		return nil, fmt.Errorf("expected at least five labels, got %s", s)
 	}
 	labels := awsLabels{
 		statistic: stringLabels[len(stringLabels)-5],
@@ -319,7 +317,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		case "SampleCount":
 			value, err = h.Sum(values)
 		default:
-			err = fmt.Errorf("Unknown Statistic type: %s", labels.statistic)
+			err = fmt.Errorf("unknown statistic type: %s", labels.statistic)
 		}
 		if err != nil {
 			h.LogError(err)
@@ -337,7 +335,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		labels := []string{"name", "id", "type", "region"}
 
 		exporter.mutex.Lock()
-		if _, ok := exporter.data[name+region]; ok == false {
+		if _, ok := exporter.data[name+region]; !ok {
 			if stat == "Sum" {
 				exporter.data[name+region] = NewBatchCounterVec(opts, labels)
 			} else {
@@ -363,7 +361,7 @@ func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, lab
 		if md.timestamps == nil {
 			md.timestamps = make(map[awsLabels]*time.Time)
 		}
-		if lastTimestamp, ok := md.timestamps[*labels]; ok == true {
+		if lastTimestamp, ok := md.timestamps[*labels]; ok {
 			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
 		}
 		if len(values) > 0 {
@@ -457,17 +455,8 @@ func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceD
 	}
 	h.LogError(err)
 
-	queryRange := time.Duration(md.Period) * time.Minute
-	if val, ok := nd.Parent.Config.Metrics.Data[*nd.Namespace]; ok {
-		// Some resources don't have any data for a while (e.g. S3), in these cases the Period parameter
-		// can be used to override the window used when querying the Cloudwatch API.
-		if val.Period > 0 {
-			queryRange = time.Duration(val.Period) * time.Minute
-		}
-	}
-
 	end := time.Now().Round(5 * time.Minute)
-	start := end.Add(-queryRange)
+	start := end.Add(-time.Duration(md.RangeSeconds))
 
 	input := cloudwatch.GetMetricDataInput{
 		StartTime:         &start,
