@@ -7,18 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-/*
-Example config
-
-metrics:
-  AWS/ELB:
-   - metric: RequestCount
-     help: "This is some help about the metric"
-     dimensions: [AvailabilityZone, LoadBalancerName]
-       resource_type_selection: "elasticloadbalancing:loadbalancer"
-       resource_id_dimension: LoadBalancerName
-     statistics: [Sum]
-*/
 type configMetric struct {
 	AWSMetric     string    `yaml:"metric"`         // The Cloudwatch metric to use
 	Help          string    `yaml:"help"`           // Custom help text for the generated metric
