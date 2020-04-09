@@ -2,7 +2,7 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/CoverGenius/cloudwatch-prometheus-exporter)][goreportcard]
 
-Cloudwatch prometheus exporter with support for multiple regions and counter metrics
+CloudWatch prometheus exporter with support for multiple regions and counter metrics.
 
 `./cloudwatch-prometheus-exporter -config </path/to/your/config.yaml>`
 
@@ -46,7 +46,7 @@ Name              | Description
 `tags`            | Optional. List of name, value pairs used to filter AWS resources.
 `poll_interval`   | Optional. How often in seconds to fetch new data from the CloudWatch API, should be less than or equal to Period. Defaults to 300 (5 minutes).
 `log_level`       | Optional. Logging verbosity, must be between 1 and 5 inclusive. Higher levels represent greater verbosity. Defaults to 3 (log warnings and above).
-`period_seconds`  | Optional. How far back to request data for in seconds. Defaults to 60 (1 minute).
+`period_seconds`  | Optional. Granularity of data retrieved from CloudWatch. Defaults to 60 (1 minute).
 `range_seconds`   | Optional. How far back to request data for in seconds. Defaults to 300 (5 minutes).
 `metrics`         | Optional. Map of metric configurations keyed by CloudWatch namespace, see per metric options below.
 
@@ -60,7 +60,7 @@ Name              | Description
 `output_name`     | Optional. Name to use for the generated Prometheus metric. Defaults to `<snake_case_metric>_<statistic>` if not set.
 `help`            | Optional. The help text to use for the generated Prometheus metric. Defaults are configured for most CloudWatch metrics.
 `statistics`      | Optional. List of CloudWatch statistics to generate metric series for. Defaults to `[Average]`.
-`period_seconds`  | Optional. How far back to request data for in seconds. Defaults to global `period_seconds` if not set.
+`period_seconds`  | Optional. Granularity of data retrieved from CloudWatch. Defaults to 60 (1 minute).
 `range_seconds`   | Optional. How far back to request data for in seconds. Defaults to global `range_seconds` if not set.
 
 [goreportcard]: https://goreportcard.com/report/github.com/CoverGenius/cloudwatch-prometheus-exporter
