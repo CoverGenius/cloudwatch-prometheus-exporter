@@ -19,7 +19,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) er
 		},
 		{
 			Name:  aws.String("StorageType"),
-			Value: aws.String("AllStorageType"),
+			Value: aws.String("AllStorageTypes"),
 		},
 	}
 	err := rd.BuildDimensions(dd)

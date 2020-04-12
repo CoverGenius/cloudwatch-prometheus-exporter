@@ -8,13 +8,13 @@ import (
 )
 
 type configMetric struct {
-	AWSMetric     string    `yaml:"metric"`         // The Cloudwatch metric to use
-	Help          string    `yaml:"help"`           // Custom help text for the generated metric
-	Dimensions    []*string `yaml:"dimensions"`     // The resource dimensions to generate individual series for (via labels)
-	Statistics    []*string `yaml:"statistics"`     // List of AWS statistics to use.
-	OutputName    string    `yaml:"output_name"`    // Allows override of the generate metric name
-	RangeSeconds  int64     `yaml:"range_seconds"`  // How far back to request data for in seconds.
-	PeriodSeconds int64     `yaml:"period_seconds"` // Granularity of results from cloudwatch API.
+	AWSMetric     string                  `yaml:"metric"`         // The Cloudwatch metric to use
+	Help          string                  `yaml:"help"`           // Custom help text for the generated metric
+	Dimensions    []*cloudwatch.Dimension `yaml:"dimensions"`     // The resource dimensions to generate individual series for (via labels)
+	Statistics    []*string               `yaml:"statistics"`     // List of AWS statistics to use.
+	OutputName    string                  `yaml:"output_name"`    // Allows override of the generate metric name
+	RangeSeconds  int64                   `yaml:"range_seconds"`  // How far back to request data for in seconds.
+	PeriodSeconds int64                   `yaml:"period_seconds"` // Granularity of results from cloudwatch API.
 }
 
 type metric struct {
@@ -48,9 +48,12 @@ func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescript
 			if namespaceDefaults, ok := defaults[namespace]; ok {
 				for key, defaultMetric := range namespaceDefaults {
 					metrics = append(metrics, &configMetric{
-						AWSMetric:  key,
-						OutputName: *defaultMetric.OutputName,
-						Help:       *defaultMetric.Help,
+						AWSMetric:     key,
+						OutputName:    *defaultMetric.OutputName,
+						Help:          *defaultMetric.Help,
+						PeriodSeconds: defaultMetric.PeriodSeconds,
+						RangeSeconds:  defaultMetric.RangeSeconds,
+						Dimensions:    defaultMetric.Dimensions,
 					})
 				}
 			}
@@ -90,7 +93,7 @@ func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescript
 			mds[namespace] = append(mds[namespace], &MetricDescription{
 				Help:          &help,
 				OutputName:    &name,
-				Dimensions:    []*cloudwatch.Dimension{},
+				Dimensions:    metric.Dimensions,
 				PeriodSeconds: period,
 				RangeSeconds:  rangeSeconds,
 				Statistic:     metric.Statistics,

@@ -35,8 +35,8 @@ type TagDescription struct {
 
 // DimensionDescription represents a Cloudwatch dimension key value pair
 type DimensionDescription struct {
-	Name  *string
-	Value *string
+	Name  *string `yaml:"name"`
+	Value *string `yaml:"value"`
 }
 
 // MetricDescription describes a single Cloudwatch metric with one or more
@@ -456,7 +456,7 @@ func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceD
 	h.LogError(err)
 
 	end := time.Now().Round(5 * time.Minute)
-	start := end.Add(-time.Duration(md.RangeSeconds))
+	start := end.Add(-time.Duration(md.RangeSeconds) * time.Second)
 
 	input := cloudwatch.GetMetricDataInput{
 		StartTime:         &start,
