@@ -184,27 +184,25 @@ func (rd *RegionDescription) CreateNamespaceDescriptions() error {
 func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	log.Infof("Gathering metrics for region %s...", *rd.Region)
 
-	ndc := make(chan *NamespaceDescription)
 	for _, namespace := range rd.Namespaces {
 		// Initialize metric containers if they don't already exist
 		for awsMetric, metric := range namespace.Metrics {
 			metric.AWSMetric = awsMetric
 		}
-		go namespace.GatherMetrics(cw, ndc)
+		go namespace.GatherMetrics(cw)
 	}
 }
 
 // GatherMetrics queries the Cloudwatch API for metrics related to this AWS namespace in the parent region
-func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch, ndc chan *NamespaceDescription) {
+func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	for _, md := range nd.Metrics {
-		go func(md *MetricDescription, ndc chan *NamespaceDescription) {
+		go func(md *MetricDescription) {
 			nd.Mutex.RLock()
 			result, err := md.getData(cw, nd.Resources, nd)
 			nd.Mutex.RUnlock()
 			h.LogError(err)
 			md.saveData(result, *nd.Parent.Region)
-			ndc <- nd
-		}(md, ndc)
+		}(md)
 	}
 }
 
