@@ -8,11 +8,11 @@ import (
 )
 
 // Metrics is a map of default MetricDescriptions for this namespace
-var Metrics = map[string]*b.MetricDescription{
+var Metrics = map[string]*b.ConfigMetric{
 	"BucketSizeBytes": {
-		Help:          aws.String("The amount of data in bytes stored in a bucket in the STANDARD storage class, INTELLIGENT_TIERING storage class, Standard - Infrequent Access (STANDARD_IA) storage class, OneZone - Infrequent Access (ONEZONE_IA), Reduced Redundancy Storage (RRS) class, Deep Archive Storage (DEEP_ARCHIVE) class or, Glacier (GLACIER) storage class"),
-		OutputName:    aws.String("s3_bucket_size_bytes"),
-		Statistic:     h.StringPointers("Average"),
+		Help:          "The amount of data in bytes stored in a bucket in the STANDARD storage class, INTELLIGENT_TIERING storage class, Standard - Infrequent Access (STANDARD_IA) storage class, OneZone - Infrequent Access (ONEZONE_IA), Reduced Redundancy Storage (RRS) class, Deep Archive Storage (DEEP_ARCHIVE) class or, Glacier (GLACIER) storage class",
+		OutputName:    "s3_bucket_size_bytes",
+		Statistics:    h.StringPointers("Average"),
 		PeriodSeconds: 60 * 60 * 24,
 		RangeSeconds:  60 * 60 * 24 * 7,
 		Dimensions: []*cloudwatch.Dimension{
@@ -23,9 +23,9 @@ var Metrics = map[string]*b.MetricDescription{
 		},
 	},
 	"NumberOfObjects": {
-		Help:          aws.String("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
-		OutputName:    aws.String("s3_number_of_objects"),
-		Statistic:     h.StringPointers("Average"),
+		Help:          ("The total number of objects stored in a bucket for all storage classes except for the GLACIER storage class"),
+		OutputName:    ("s3_number_of_objects"),
+		Statistics:    h.StringPointers("Average"),
 		PeriodSeconds: 60 * 60 * 24,
 		RangeSeconds:  60 * 60 * 24 * 7,
 		Dimensions: []*cloudwatch.Dimension{

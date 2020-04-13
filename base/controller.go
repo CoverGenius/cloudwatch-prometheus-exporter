@@ -49,7 +49,7 @@ type MetricDescription struct {
 	Dimensions    []*cloudwatch.Dimension
 	PeriodSeconds int64
 	RangeSeconds  int64
-	Statistic     []*string
+	Statistic     string
 
 	timestamps map[awsLabels]*time.Time
 	mutex      sync.RWMutex
@@ -89,9 +89,9 @@ type ResourceDescription struct {
 	Query      []*cloudwatch.MetricDataQuery
 }
 
-func (md *MetricDescription) metricName(stat string) *string {
+func (md *MetricDescription) metricName() *string {
 	suffix := ""
-	switch stat {
+	switch md.Statistic {
 	case "Average":
 		// For backwards compatibility we have to omit the _avg
 		suffix = ""
@@ -239,62 +239,55 @@ func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwat
 	for _, rd := range rds {
 		dimensions := rd.Dimensions
 		dimensions = append(dimensions, md.Dimensions...)
-		for _, stat := range md.Statistic {
-			cm := &cloudwatch.MetricDataQuery{
-				Id: rd.queryID(*stat),
-				MetricStat: &cloudwatch.MetricStat{
-					Metric: &cloudwatch.Metric{
-						MetricName: &md.AWSMetric,
-						Namespace:  rd.Parent.Namespace,
-						Dimensions: dimensions,
-					},
-					Stat:   stat,
-					Period: aws.Int64(md.PeriodSeconds),
+		cm := &cloudwatch.MetricDataQuery{
+			Id: rd.queryID(*&md.Statistic),
+			MetricStat: &cloudwatch.MetricStat{
+				Metric: &cloudwatch.Metric{
+					MetricName: &md.AWSMetric,
+					Namespace:  rd.Parent.Namespace,
+					Dimensions: dimensions,
 				},
-				// We hardcode the label so that we can rely on the ordering in
-				// saveData.
-				Label:      aws.String((&awsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region}).String()),
-				ReturnData: aws.Bool(true),
-			}
-			query = append(query, cm)
+				Stat:   &md.Statistic,
+				Period: aws.Int64(md.PeriodSeconds),
+			},
+			// We hardcode the label so that we can rely on the ordering in
+			// saveData.
+			Label:      aws.String((&awsLabels{*rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region}).String()),
+			ReturnData: aws.Bool(true),
 		}
+		query = append(query, cm)
 	}
 	return query, nil
 }
 
 type awsLabels struct {
-	statistic string
-	name      string
-	id        string
-	rType     string
-	region    string
+	name   string
+	id     string
+	rType  string
+	region string
 }
 
 func (l *awsLabels) String() string {
-	return fmt.Sprintf("%s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region)
+	return fmt.Sprintf("%s %s %s %s", l.name, l.id, l.rType, l.region)
 }
 
 func awsLabelsFromString(s string) (*awsLabels, error) {
 	stringLabels := strings.Split(s, " ")
-	if len(stringLabels) < 5 {
-		return nil, fmt.Errorf("expected at least five labels, got %s", s)
+	if len(stringLabels) < 4 {
+		return nil, fmt.Errorf("expected at least four labels, got %s", s)
 	}
 	labels := awsLabels{
-		statistic: stringLabels[len(stringLabels)-5],
-		name:      stringLabels[len(stringLabels)-4],
-		id:        stringLabels[len(stringLabels)-3],
-		rType:     stringLabels[len(stringLabels)-2],
-		region:    stringLabels[len(stringLabels)-1],
+		name:   stringLabels[len(stringLabels)-4],
+		id:     stringLabels[len(stringLabels)-3],
+		rType:  stringLabels[len(stringLabels)-2],
+		region: stringLabels[len(stringLabels)-1],
 	}
 	return &labels, nil
 }
 
 func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region string) {
-	newData := map[string][]*promMetric{}
-	for _, stat := range md.Statistic {
-		// pre-allocate in case the last resource for a stat goes away
-		newData[*stat] = []*promMetric{}
-	}
+	newData := []*promMetric{}
+
 	for _, data := range c.MetricDataResults {
 		if len(data.Values) <= 0 {
 			continue
@@ -312,7 +305,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		}
 
 		value := 0.0
-		switch labels.statistic {
+		switch md.Statistic {
 		case "Average":
 			value, err = h.Average(values)
 		case "Sum":
@@ -324,37 +317,36 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		case "SampleCount":
 			value, err = h.Sum(values)
 		default:
-			err = fmt.Errorf("unknown statistic type: %s", labels.statistic)
+			err = fmt.Errorf("unknown statistic type: %s", md.Statistic)
 		}
 		if err != nil {
 			h.LogIfError(err)
 			continue
 		}
 
-		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region}})
+		newData = append(newData, &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region}})
 	}
-	for stat, data := range newData {
-		name := *md.metricName(stat)
-		opts := prometheus.Opts{
-			Name: name,
-			Help: *md.Help,
-		}
-		labels := []string{"name", "id", "type", "region"}
 
-		exporter.mutex.Lock()
-		if _, ok := exporter.data[name+region]; !ok {
-			if stat == "Sum" {
-				exporter.data[name+region] = NewBatchCounterVec(opts, labels)
-			} else {
-				exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
-			}
-		}
-		exporter.mutex.Unlock()
-
-		exporter.mutex.RLock()
-		exporter.data[name+region].BatchUpdate(data)
-		exporter.mutex.RUnlock()
+	name := *md.metricName()
+	opts := prometheus.Opts{
+		Name: name,
+		Help: *md.Help,
 	}
+	labels := []string{"name", "id", "type", "region"}
+
+	exporter.mutex.Lock()
+	if _, ok := exporter.data[name+region]; !ok {
+		if md.Statistic == "Sum" {
+			exporter.data[name+region] = NewBatchCounterVec(opts, labels)
+		} else {
+			exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
+		}
+	}
+	exporter.mutex.Unlock()
+
+	exporter.mutex.RLock()
+	exporter.data[name+region].BatchUpdate(newData)
+	exporter.mutex.RUnlock()
 }
 
 func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, labels *awsLabels) []*float64 {
@@ -362,7 +354,7 @@ func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, lab
 	// already been added to the counter, otherwise if the poll intervals
 	// overlap we will double count some data.
 	values := data.Values
-	if labels.statistic == "Sum" {
+	if md.Statistic == "Sum" {
 		md.mutex.Lock()
 		defer md.mutex.Unlock()
 		if md.timestamps == nil {

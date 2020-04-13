@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 )
 
-type configMetric struct {
+type ConfigMetric struct {
 	AWSMetric     string                  `yaml:"metric"`         // The Cloudwatch metric to use
 	Help          string                  `yaml:"help"`           // Custom help text for the generated metric
 	Dimensions    []*cloudwatch.Dimension `yaml:"dimensions"`     // The resource dimensions to generate individual series for (via labels)
@@ -18,7 +18,7 @@ type configMetric struct {
 }
 
 type metric struct {
-	Data map[string][]*configMetric `yaml:",omitempty,inline"` // Map from namespace to list of metrics to scrape.
+	Data map[string][]*ConfigMetric `yaml:",omitempty,inline"` // Map from namespace to list of metrics to scrape.
 }
 
 // Config represents the exporter configuration passed which is read at runtime from a YAML file.
@@ -40,16 +40,16 @@ type Config struct {
 }
 
 // ConstructMetrics generates a map of MetricDescriptions keyed by CloudWatch namespace using the defaults provided in Config.
-func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescription) map[string][]*MetricDescription {
+func (c *Config) ConstructMetrics(defaults map[string]map[string]*ConfigMetric) map[string][]*MetricDescription {
 	mds := make(map[string][]*MetricDescription)
 	for namespace, metrics := range c.Metrics.Data {
 		if len(metrics) == 0 {
 			if namespaceDefaults, ok := defaults[namespace]; ok {
 				for key, defaultMetric := range namespaceDefaults {
-					metrics = append(metrics, &configMetric{
+					metrics = append(metrics, &ConfigMetric{
 						AWSMetric:     key,
-						OutputName:    *defaultMetric.OutputName,
-						Help:          *defaultMetric.Help,
+						OutputName:    defaultMetric.OutputName,
+						Help:          defaultMetric.Help,
 						PeriodSeconds: defaultMetric.PeriodSeconds,
 						RangeSeconds:  defaultMetric.RangeSeconds,
 						Dimensions:    defaultMetric.Dimensions,
@@ -82,24 +82,25 @@ func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescript
 			help := metric.Help
 			if help == "" {
 				if d, ok := defaults[namespace][metric.AWSMetric]; ok {
-					help = *d.Help
+					help = d.Help
 				}
 			}
 
 			// TODO handle dimensions
 			// TODO move metricName function here / apply to output name
-			// TODO one stat per metric
-			mds[namespace] = append(mds[namespace], &MetricDescription{
-				Help:          &help,
-				OutputName:    &name,
-				Dimensions:    metric.Dimensions,
-				PeriodSeconds: period,
-				RangeSeconds:  rangeSeconds,
-				Statistic:     metric.Statistics,
+			for _, stat := range metric.Statistics {
+				mds[namespace] = append(mds[namespace], &MetricDescription{
+					Help:          &help,
+					OutputName:    &name,
+					Dimensions:    metric.Dimensions,
+					PeriodSeconds: period,
+					RangeSeconds:  rangeSeconds,
+					Statistic:     *stat,
 
-				Namespace: namespace,
-				AWSMetric: metric.AWSMetric,
-			})
+					Namespace: namespace,
+					AWSMetric: metric.AWSMetric,
+				})
+			}
 		}
 	}
 	return mds

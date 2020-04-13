@@ -97,7 +97,7 @@ func main() {
 	flag.Parse()
 	// TODO allow hot reload of config
 	c := processConfig(&config)
-	defaults := map[string]map[string]*base.MetricDescription{
+	defaults := map[string]map[string]*base.ConfigMetric{
 		"AWS/RDS":            rds.Metrics,
 		"AWS/ElastiCache":    elasticache.Metrics,
 		"AWS/EC2":            ec2.Metrics,
