@@ -38,7 +38,7 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Wed Apr 08 2020 Andrew Wright <andrew.w@covergenius.com>
+* Wed Apr 15 2020 Andrew Wright <andrew.w@covergenius.com>
 - Allow runtime configuration of metrics
 * Wed Apr 08 2020 Andrew Wright <andrew.w@covergenius.com>
 - Don't persist gauge metrics in between scrapes

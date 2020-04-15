@@ -7,14 +7,18 @@ api_secret: <API_SECRET>
 tags:
   - name: Environment
     value: production
-period_seconds: 300
+period_seconds: 60
 range_seconds: 300
 poll_interval: 60
 log_level: 4
 metrics:
+  AWS/ApplicationELB:
+  AWS/EC2:
+  AWS/ELB:
+  AWS/ElastiCache:
+  AWS/NATGateway:
+  AWS/NetworkELB:
   AWS/RDS:
-      - metric: CPUCreditBalance
-      - metric: WriteIOPS
   AWS/S3:
       - metric: NumberOfObjects
         period_seconds: 86400
@@ -29,5 +33,3 @@ metrics:
             - name: StorageType
               value: StandardStorage
         statistics: [Average, Sum]
-  AWS/NetworkELB:
-  AWS/EC2:

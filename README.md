@@ -23,7 +23,7 @@ tags:
     value: production
 period_seconds: 60
 range_seconds: 300
-poll_interval: 300
+poll_interval: 60
 log_level: 4
 metrics:
   AWS/EC2:
