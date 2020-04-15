@@ -33,7 +33,7 @@ func init() {
 	flag.StringVar(&config, "config", "config.yaml", "Path to config file")
 }
 
-func run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd *base.RegionDescription, pi int64, cfg map[string][]*base.MetricDescription) {
+func run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd *base.RegionDescription, pi int64) {
 	var delay int64 = 0
 	for {
 		select {
@@ -94,8 +94,8 @@ func processConfig(p *string) *base.Config {
 }
 
 func main() {
-	// TODO allow hot reload of config
 	flag.Parse()
+	// TODO allow hot reload of config
 	c := processConfig(&config)
 	defaults := map[string]map[string]*base.MetricDescription{
 		"AWS/RDS":            rds.Metrics,
@@ -110,13 +110,15 @@ func main() {
 	mds := c.ConstructMetrics(defaults)
 
 	for _, r := range c.Regions {
-		session := session.Must(session.NewSession(&aws.Config{Region: r}))
-		cw := cloudwatch.New(session)
+		awsSession := session.Must(session.NewSession(&aws.Config{Region: r}))
+		cw := cloudwatch.New(awsSession)
 		rd := base.RegionDescription{Region: r}
 		rdd = append(rdd, &rd)
-		rd.Init(session, c.Tags, mds)
+		if err := rd.Init(awsSession, c.Tags, mds); err != nil {
+			log.Fatalf("error initializing region: %s", err)
+		}
 
-		go run(rd.Namespaces, cw, &rd, c.PollInterval, mds)
+		go run(rd.Namespaces, cw, &rd, c.PollInterval)
 	}
 
 	http.Handle("/metrics", promhttp.Handler())

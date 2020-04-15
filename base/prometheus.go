@@ -132,5 +132,4 @@ func NewBatchCounterVec(opts prometheus.Opts, labels []string) *BatchCounterVec 
 			labels,
 		),
 	}
-
 }
