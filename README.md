@@ -26,12 +26,17 @@ range_seconds: 300
 poll_interval: 300
 log_level: 4
 metrics:
-  AWS/S3:
   AWS/EC2:
   AWS/RDS:
       - metric: CPUCreditBalance
-        statistics: [Average, Minimum]
       - metric: WriteIOPS
+  AWS/S3:
+      - metric: BucketSizeBytes
+        period_seconds: 86400
+        range_seconds: 604800
+        dimensions:
+            - name: StorageType
+              value: StandardStorage
         statistics: [Maximum]
 ```
 

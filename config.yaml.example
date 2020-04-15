@@ -14,11 +14,20 @@ log_level: 4
 metrics:
   AWS/RDS:
       - metric: CPUCreditBalance
-        dimensions: []
-        statistics: [Average, Sum]
       - metric: WriteIOPS
-        dimensions: []
-        statistics: [Average, Sum]
   AWS/S3:
+      - metric: NumberOfObjects
+        period_seconds: 86400
+        range_seconds: 604800
+        dimensions:
+            - name: StorageType
+              value: AllStorageTypes
+      - metric: BucketSizeBytes
+        period_seconds: 86400
+        range_seconds: 604800
+        dimensions:
+            - name: StorageType
+              value: StandardStorage
+        statistics: [Average, Sum]
   AWS/NetworkELB:
   AWS/EC2:
