@@ -53,6 +53,7 @@ func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescript
 						PeriodSeconds: defaultMetric.PeriodSeconds,
 						RangeSeconds:  defaultMetric.RangeSeconds,
 						Dimensions:    defaultMetric.Dimensions,
+						Statistics:    defaultMetric.Statistic,
 					})
 				}
 			}
