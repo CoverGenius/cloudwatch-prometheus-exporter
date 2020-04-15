@@ -19,7 +19,7 @@ func CreateResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) er
 		},
 		{
 			Name:  aws.String("StorageType"),
-			Value: aws.String("AllStorageType"),
+			Value: aws.String("AllStorageTypes"),
 		},
 	}
 	err := rd.BuildDimensions(dd)
@@ -43,7 +43,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := s3.New(nd.Parent.Session)
 	input := s3.ListBucketsInput{}
 	result, err := session.ListBuckets(&input)

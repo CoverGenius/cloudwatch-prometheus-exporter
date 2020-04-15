@@ -36,7 +36,6 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescript
 	rd.ID = td.ResourceArn
 	rd.Name = &lbName
 	rd.Parent = nd
-	nd.Metrics = GetMetrics(rd.Type)
 	nd.Resources = append(nd.Resources, &rd)
 
 	return nil

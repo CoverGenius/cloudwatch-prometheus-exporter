@@ -36,7 +36,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	log.Debug("Creating Elasticache resource list ...")
 
 	resources := []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := elasticache.New(nd.Parent.Session)
 	input := elasticache.DescribeCacheClustersInput{}
 	result, err := session.DescribeCacheClusters(&input)

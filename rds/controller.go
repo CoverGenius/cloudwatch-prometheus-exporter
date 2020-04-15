@@ -37,7 +37,6 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Debug("Creating RDS resource list ...")
 	nd.Resources = []*b.ResourceDescription{}
-	nd.Metrics = GetMetrics()
 	session := rds.New(nd.Parent.Session)
 	input := rds.DescribeDBInstancesInput{}
 	result, err := session.DescribeDBInstances(&input)
