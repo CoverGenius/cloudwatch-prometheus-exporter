@@ -11,17 +11,14 @@ import (
 // If an error is encountered while reading the file it is logged NOT returned
 func ReadFile(path *string) *[]byte {
 	absolutePath, err := filepath.Abs(*path)
-	LogError(err)
+	LogIfError(err)
 	content, err := ioutil.ReadFile(absolutePath)
-	LogError(err)
+	LogIfError(err)
 	return &content
 }
 
 // IsFileExists returns true if a file located a path exists
 func IsFileExists(path *string) bool {
 	_, err := os.Stat(*path)
-	if err == nil {
-		return true
-	}
-	return false
+	return err == nil
 }
