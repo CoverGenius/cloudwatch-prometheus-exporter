@@ -11,7 +11,7 @@ func YAMLDecode(path *string, i interface{}) {
 	if IsFileExists(path) {
 		content := ReadFile(path)
 		err := yaml.Unmarshal(*content, i)
-		LogErrorExit(err)
+		LogIfErrorExit(err)
 	} else {
 		log.Fatalf("File: %s does not exists!\n", *path)
 	}

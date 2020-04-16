@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instance) error {
+func createResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instance) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -19,8 +19,9 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 			Value: instance.InstanceId,
 		},
 	}
-	err := rd.BuildDimensions(dd)
-	h.LogError(err)
+	if err := rd.BuildDimensions(dd); err != nil {
+		return nil, err
+	}
 
 	tags := make(map[string]*string)
 	for _, t := range instance.Tags {
@@ -34,29 +35,32 @@ func CreateResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	}
 	rd.Type = aws.String("ec2")
 	rd.Parent = nd
-	nd.Resources = append(nd.Resources, &rd)
 
-	return nil
+	return &rd, nil
 }
 
 // CreateResourceList fetches a list of all EC2 instances in the parent region
-func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
+func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Debug("Creating EC2 resource list ...")
 
-	nd.Resources = []*b.ResourceDescription{}
 	session := ec2.New(nd.Parent.Session)
 	input := ec2.DescribeInstancesInput{
 		Filters: nd.Parent.Filters,
 	}
 	result, err := session.DescribeInstances(&input)
-	h.LogError(err)
+	h.LogIfError(err)
 
+	resources := []*b.ResourceDescription{}
 	for _, reservation := range result.Reservations {
 		for _, instance := range reservation.Instances {
-			err := CreateResourceDescription(nd, instance)
-			h.LogError(err)
+			if r, err := createResourceDescription(nd, instance); err == nil {
+				resources = append(resources, r)
+			}
+			h.LogIfError(err)
 		}
 	}
-	return nil
+	nd.Mutex.Lock()
+	nd.Resources = resources
+	nd.Mutex.Unlock()
 }

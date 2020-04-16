@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
-func CreateResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescription) error {
+func createResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescription) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -20,47 +20,50 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescriptio
 		},
 	}
 	err := rd.BuildDimensions(dd)
-	h.LogError(err)
+	h.LogIfError(err)
 	rd.ID = td.LoadBalancerName
 	rd.Name = td.LoadBalancerName
 	rd.Type = aws.String("lb-classic")
 	rd.Parent = nd
-	nd.Resources = append(nd.Resources, &rd)
 
-	return nil
+	return &rd, nil
 }
 
 // CreateResourceList fetches a list of all Classic LB resources in the region
-func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
+func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Debug("Creating Classic LB resource list ...")
-	nd.Resources = []*b.ResourceDescription{}
 	session := elb.New(nd.Parent.Session)
 	input := elb.DescribeLoadBalancersInput{}
 	result, err := session.DescribeLoadBalancers(&input)
-	h.LogError(err)
+	h.LogIfError(err)
 
 	resourceList := []*string{}
 	for _, lb := range result.LoadBalancerDescriptions {
 		resourceList = append(resourceList, lb.LoadBalancerName)
 	}
 	if len(resourceList) <= 0 {
-		return nil
+		return
 	}
 
 	dti := elb.DescribeTagsInput{
 		LoadBalancerNames: resourceList,
 	}
 	tags, err := session.DescribeTags(&dti)
-	h.LogError(err)
+	h.LogIfError(err)
 
+	resources := []*b.ResourceDescription{}
 	for _, td := range tags.TagDescriptions {
 		if nd.Parent.TagsFound(td) {
-			err := CreateResourceDescription(nd, td)
-			h.LogError(err)
+			if r, err := createResourceDescription(nd, td); err == nil {
+				resources = append(resources, r)
+			}
+			h.LogIfError(err)
 		} else {
 			continue
 		}
 	}
-	return nil
+	nd.Mutex.Lock()
+	nd.Resources = resources
+	nd.Mutex.Unlock()
 }

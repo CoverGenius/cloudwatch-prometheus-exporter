@@ -25,7 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var alphaRegex, _ = regexp.Compile("[^a-zA-Z0-9]+")
+var alphaRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
 
 // TagDescription represents an AWS tag key value pair
 type TagDescription struct {
@@ -120,7 +120,7 @@ func (rd *RegionDescription) BuildARN(s *string, r *string) (string, error) {
 	return a.String(), nil
 }
 
-func (rd *RegionDescription) buildFilters() error {
+func (rd *RegionDescription) saveFilters() {
 	filters := []*ec2.Filter{}
 	for _, tag := range rd.Tags {
 		f := &ec2.Filter{
@@ -130,16 +130,20 @@ func (rd *RegionDescription) buildFilters() error {
 		filters = append(filters, f)
 	}
 	rd.Filters = filters
-	return nil
 }
 
 func (rd *RegionDescription) saveAccountID() error {
 	session := iam.New(rd.Session)
 	input := iam.GetUserInput{}
 	user, err := session.GetUser(&input)
-	h.LogError(err)
+	if err != nil {
+		return err
+	}
+
 	a, err := arn.Parse(*user.User.Arn)
-	h.LogError(err)
+	if err != nil {
+		return err
+	}
 	rd.AccountID = &a.AccountID
 
 	return nil
@@ -153,13 +157,16 @@ func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, metr
 	rd.Tags = td
 
 	err := rd.saveAccountID()
-	h.LogErrorExit(err)
+	if err != nil {
+		return fmt.Errorf("error saving account id: %s", err)
+	}
 
-	err = rd.buildFilters()
-	h.LogErrorExit(err)
+	rd.saveFilters()
 
 	err = rd.CreateNamespaceDescriptions(metrics)
-	h.LogErrorExit(err)
+	if err != nil {
+		return fmt.Errorf("error creating namespaces: %s", err)
+	}
 
 	return nil
 }
@@ -196,9 +203,9 @@ func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	for _, md := range nd.Metrics {
 		go func(md *MetricDescription) {
 			nd.Mutex.RLock()
-			result, err := md.getData(cw, nd.Resources, nd)
+			result, err := md.getData(cw, nd.Resources)
 			nd.Mutex.RUnlock()
-			h.LogError(err)
+			h.LogIfError(err)
 			md.saveData(result, *nd.Parent.Region)
 		}(md)
 	}
@@ -295,7 +302,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 
 		labels, err := awsLabelsFromString(*data.Label)
 		if err != nil {
-			h.LogError(err)
+			h.LogIfError(err)
 			continue
 		}
 
@@ -320,7 +327,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 			err = fmt.Errorf("unknown statistic type: %s", labels.statistic)
 		}
 		if err != nil {
-			h.LogError(err)
+			h.LogIfError(err)
 			continue
 		}
 
@@ -448,12 +455,12 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 	return false
 }
 
-func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription, nd *NamespaceDescription) (*cloudwatch.GetMetricDataOutput, error) {
+func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription) (*cloudwatch.GetMetricDataOutput, error) {
 	query, err := md.BuildQuery(rds)
-	if len(query) < 1 {
+	if len(query) == 0 {
 		return &cloudwatch.GetMetricDataOutput{}, nil
 	}
-	h.LogError(err)
+	h.LogIfError(err)
 
 	end := time.Now().Round(5 * time.Minute)
 	start := end.Add(-time.Duration(md.RangeSeconds) * time.Second)
@@ -464,7 +471,7 @@ func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceD
 		MetricDataQueries: query,
 	}
 	result, err := cw.GetMetricData(&input)
-	h.LogError(err)
+	h.LogIfError(err)
 
 	return result, err
 }

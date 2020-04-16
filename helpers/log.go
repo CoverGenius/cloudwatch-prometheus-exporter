@@ -27,15 +27,15 @@ func GetLogLevel(level uint8) log.Level {
 	}
 }
 
-// LogError logs err if it is non nil
-func LogError(err error) {
+// LogIfError logs err if it is non nil
+func LogIfError(err error) {
 	if err != nil {
 		log.Error(err)
 	}
 }
 
-// LogErrorExit logs err and exits if the input error is non nil
-func LogErrorExit(err error) {
+// LogIfErrorExit logs err and exits if the input error is non nil
+func LogIfErrorExit(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}

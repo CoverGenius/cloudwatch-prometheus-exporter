@@ -13,8 +13,8 @@ type configMetric struct {
 	Dimensions    []*cloudwatch.Dimension `yaml:"dimensions"`     // The resource dimensions to generate individual series for (via labels)
 	Statistics    []*string               `yaml:"statistics"`     // List of AWS statistics to use.
 	OutputName    string                  `yaml:"output_name"`    // Allows override of the generate metric name
-	RangeSeconds  int64                   `yaml:"range_seconds"`  // How far back to request data for in seconds.
 	PeriodSeconds int64                   `yaml:"period_seconds"` // Granularity of results from cloudwatch API.
+	RangeSeconds  int64                   `yaml:"range_seconds"`  // How far back to request data for in seconds.
 }
 
 type metric struct {
@@ -43,8 +43,7 @@ type Config struct {
 func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescription) map[string][]*MetricDescription {
 	mds := make(map[string][]*MetricDescription)
 	for namespace, metrics := range c.Metrics.Data {
-
-		if len(metrics) <= 0 {
+		if len(metrics) == 0 {
 			if namespaceDefaults, ok := defaults[namespace]; ok {
 				for key, defaultMetric := range namespaceDefaults {
 					metrics = append(metrics, &configMetric{
@@ -54,6 +53,7 @@ func (c *Config) ConstructMetrics(defaults map[string]map[string]*MetricDescript
 						PeriodSeconds: defaultMetric.PeriodSeconds,
 						RangeSeconds:  defaultMetric.RangeSeconds,
 						Dimensions:    defaultMetric.Dimensions,
+						Statistics:    defaultMetric.Statistic,
 					})
 				}
 			}

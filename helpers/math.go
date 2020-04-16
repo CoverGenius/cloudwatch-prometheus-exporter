@@ -31,7 +31,7 @@ func Sum(items []*float64) (float64, error) {
 // returns an error if the input slice is empty
 func Min(items []*float64) (float64, error) {
 	if len(items) < 1 {
-		return 0.0, errors.New("Cannot calculate minimum of empty list")
+		return 0.0, errors.New("cannot calculate minimum of empty list")
 	}
 
 	var min = *items[0]

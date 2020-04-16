@@ -1,6 +1,8 @@
 package elbv2
 
 import (
+	"errors"
+
 	b "github.com/CoverGenius/cloudwatch-prometheus-exporter/base"
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	"github.com/aws/aws-sdk-go/aws"
@@ -11,18 +13,19 @@ import (
 	"sync"
 )
 
-func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescription) error {
+func createResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescription) (*b.ResourceDescription, error) {
 	lbID := strings.Split(*td.ResourceArn, "loadbalancer/")[1]
 	lbTypeAndName := strings.Split(lbID, "/")
 	lbName := lbTypeAndName[1]
 
 	rd := b.ResourceDescription{}
-	if lbTypeAndName[0] == "net" && *nd.Namespace == "AWS/NetworkELB" {
+	switch {
+	case lbTypeAndName[0] == "net" && *nd.Namespace == "AWS/NetworkELB":
 		rd.Type = aws.String("lb-network")
-	} else if lbTypeAndName[0] == "app" && *nd.Namespace == "AWS/ApplicationELB" {
+	case lbTypeAndName[0] == "app" && *nd.Namespace == "AWS/ApplicationELB":
 		rd.Type = aws.String("lb-application")
-	} else {
-		return nil
+	default:
+		return nil, errors.New("invalid lb type")
 	}
 
 	dd := []*b.DimensionDescription{
@@ -32,24 +35,22 @@ func CreateResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescript
 		},
 	}
 	err := rd.BuildDimensions(dd)
-	h.LogError(err)
+	h.LogIfError(err)
 	rd.ID = td.ResourceArn
 	rd.Name = &lbName
 	rd.Parent = nd
-	nd.Resources = append(nd.Resources, &rd)
 
-	return nil
+	return &rd, nil
 }
 
 // CreateResourceList fetches a list of all ALB/NLB resources in the region
-func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
+func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Debug("Creating ALB/NLB resource list ...")
-	nd.Resources = []*b.ResourceDescription{}
 	session := elbv2.New(nd.Parent.Session)
 	input := elbv2.DescribeLoadBalancersInput{}
 	result, err := session.DescribeLoadBalancers(&input)
-	h.LogError(err)
+	h.LogIfError(err)
 
 	resourceList := []*string{}
 	for _, lb := range result.LoadBalancers {
@@ -69,17 +70,23 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 			ResourceArns: resourceList[i:end],
 		}
 		tags, err := session.DescribeTags(&dti)
-		h.LogError(err)
+		h.LogIfError(err)
 		tagDescriptions = append(tagDescriptions, tags.TagDescriptions...)
 	}
 
+	resources := []*b.ResourceDescription{}
 	for _, td := range tagDescriptions {
 		if nd.Parent.TagsFound(td) {
-			err := CreateResourceDescription(nd, td)
-			h.LogError(err)
+			if r, err := createResourceDescription(nd, td); err == nil {
+				resources = append(resources, r)
+			}
+			h.LogIfError(err)
 		} else {
 			continue
 		}
 	}
-	return nil
+
+	nd.Mutex.Lock()
+	nd.Resources = resources
+	nd.Mutex.Unlock()
 }

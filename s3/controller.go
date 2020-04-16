@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func CreateResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) error {
+func createResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -23,36 +23,33 @@ func CreateResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) er
 		},
 	}
 	err := rd.BuildDimensions(dd)
-	h.LogError(err)
+	h.LogIfError(err)
 	rd.ID = bucket.Name
 	rd.Name = bucket.Name
 	rd.Type = aws.String("s3")
 	rd.Parent = nd
-	nd.Mutex.Lock()
-	nd.Resources = append(nd.Resources, &rd)
-	nd.Mutex.Unlock()
 
-	return nil
+	return &rd, err
 }
 
 // CreateResourceList fetches a list of all S3 buckets in the region
 //
 // TODO channel can be added instead of sync.WaitGroup
-func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
+func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 	log.Debug("Creating S3 resource list ...")
 	defer wg.Done()
 
-	nd.Resources = []*b.ResourceDescription{}
 	session := s3.New(nd.Parent.Session)
 	input := s3.ListBucketsInput{}
 	result, err := session.ListBuckets(&input)
-	h.LogError(err)
+	h.LogIfError(err)
 
 	tagError := "NoSuchTagSet"
 
 	var w sync.WaitGroup
 	w.Add(len(result.Buckets))
 
+	ch := make(chan *b.ResourceDescription, len(result.Buckets))
 	for _, bucket := range result.Buckets {
 		go func(bucket *s3.Bucket, wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -60,7 +57,7 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 				Bucket: bucket.Name,
 			}
 			location, err := session.GetBucketLocation(&input)
-			h.LogError(err)
+			h.LogIfError(err)
 
 			if location.LocationConstraint == nil || *location.LocationConstraint != *nd.Parent.Region {
 				return
@@ -71,17 +68,26 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) error {
 			}
 
 			tags, err := session.GetBucketTagging(&locationInput)
-			if b.IsSameErrorType(err, &tagError) == false {
-				h.LogError(err)
+			if !b.IsSameErrorType(err, &tagError) {
+				h.LogIfError(err)
 			}
 
 			if nd.Parent.TagsFound(tags) {
-				err := CreateResourceDescription(nd, bucket)
-				h.LogError(err)
+				if r, err := createResourceDescription(nd, bucket); err == nil {
+					ch <- r
+				}
+				h.LogIfError(err)
 			}
 		}(bucket, &w)
 	}
 	w.Wait()
+	close(ch)
 
-	return nil
+	resources := []*b.ResourceDescription{}
+	for r := range ch {
+		resources = append(resources, r)
+	}
+	nd.Mutex.Lock()
+	nd.Resources = resources
+	nd.Mutex.Unlock()
 }
