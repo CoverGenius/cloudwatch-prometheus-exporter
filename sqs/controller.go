@@ -5,7 +5,6 @@ import (
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
 
-	"fmt"
 	"strings"
 	"sync"
 
@@ -15,7 +14,6 @@ import (
 
 func createResourceDescription(nd *b.NamespaceDescription, qu *string) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
-	fmt.Printf("queue url: %s\n", *qu)
 
 	parts := strings.Split(*qu, "/")
 
