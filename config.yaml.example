@@ -19,6 +19,7 @@ metrics:
   AWS/NATGateway:
   AWS/NetworkELB:
   AWS/RDS:
+  AWS/SQS:
   AWS/S3:
       - metric: NumberOfObjects
         period_seconds: 86400

@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
@@ -427,6 +428,17 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		for _, tag := range i.TagSet {
 			t := TagDescription{}
 			awsutil.Copy(&t, tag)
+			tags = append(tags, &t)
+		}
+	case *sqs.ListQueueTagsOutput:
+		if len(i.Tags) < 1 {
+			return false
+		}
+		for key, value := range i.Tags {
+			t := TagDescription{
+				Key:   aws.String(key),
+				Value: value,
+			}
 			tags = append(tags, &t)
 		}
 	default:

@@ -9,6 +9,7 @@ var namespaces = []string{
 	"AWS/NATGateway",
 	"AWS/EC2",
 	"AWS/S3",
+	"AWS/SQS",
 }
 
 // GetNamespaces returns a list of AWS namespaces which are configured for this exporter
