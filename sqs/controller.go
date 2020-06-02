@@ -16,19 +16,20 @@ func createResourceDescription(nd *b.NamespaceDescription, qu *string) (*b.Resou
 	rd := b.ResourceDescription{}
 
 	parts := strings.Split(*qu, "/")
+	queueName := h.GetLastStringElement(parts)
 
 	dd := []*b.DimensionDescription{
 		{
 			Name:  aws.String("QueueName"),
-			Value: h.GetLastStringElement(parts),
+			Value: queueName,
 		},
 	}
 	if err := rd.BuildDimensions(dd); err != nil {
 		return nil, err
 	}
 
-	rd.ID = qu
-	rd.Name = qu
+	rd.ID = queueName
+	rd.Name = queueName
 	rd.Type = aws.String("sqs")
 	rd.Parent = nd
 
