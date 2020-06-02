@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.1
+Version: 0.1.2
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Jun 02 2020 Serghei Anicheev <serghei@covergenius.com>
+- Adding SQS metrics
 * Thu Apr 16 2020 Andrew Wright <andrew.w@covergenius.com>
 - Fix race condition when fetching resource list
 * Wed Apr 15 2020 Andrew Wright <andrew.w@covergenius.com>
