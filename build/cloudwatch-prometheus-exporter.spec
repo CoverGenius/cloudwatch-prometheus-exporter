@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.2
+Version: 0.1.3
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Jun 05 2020 Serghei Anicheev <serghei@covergenius.com>
+- Ignoring resources with Silent tag set.
 * Tue Jun 02 2020 Serghei Anicheev <serghei@covergenius.com>
 - Adding SQS metrics
 * Thu Apr 16 2020 Andrew Wright <andrew.w@covergenius.com>

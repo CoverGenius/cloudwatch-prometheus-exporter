@@ -57,7 +57,7 @@ Name              | Description
 
 ### Per metric options
 
-The exporter will not query metrics for a namespace unless there is a key for that namespace under the `metrics` option. If only the namespace key is set then the default metrics for that namespace will be used. Otherwise individual metrics can be configured using the options below.
+The exporter will not query metrics for a namespace unless there is a key for that namespace under the `metrics` option. If only the namespace key is set then the default metrics for that namespace will be used. Otherwise individual metrics can be configured using the options below. Resources having tag `Silent=true` will be skipped(EC2 resources still will be processed).
 
 Name              | Description
 ------------------|------------

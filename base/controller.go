@@ -455,6 +455,9 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 
 	for _, left := range rd.Tags {
 		for _, right := range tags {
+			if (*right.Key == "Silent" && *right.Value == "true"){
+				break
+			}
 			if *left.Key == *right.Key && *left.Value == *right.Value {
 				numberOfNegativeMatches--
 				break
