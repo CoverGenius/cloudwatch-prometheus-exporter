@@ -150,8 +150,8 @@ func (rd *RegionDescription) saveAccountID() error {
 	return nil
 }
 
-// Init initializes a region and its nested namspaces in preparation for collection
-// cloudwatchc metrics for that region.
+// Init initializes a region and its nested namespaces in preparation for
+// collection of cloudwatchc metrics for that region.
 func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, metrics map[string][]*MetricDescription) error {
 	log.Infof("Initializing region %s ...", *rd.Region)
 	rd.Session = s
