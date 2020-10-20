@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, qu *string) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, qu *string) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 
 	parts := strings.Split(*qu, "/")
@@ -32,6 +32,7 @@ func createResourceDescription(nd *b.NamespaceDescription, qu *string) (*b.Resou
 	rd.Name = queueName
 	rd.Type = aws.String("sqs")
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, nil
 }
@@ -57,8 +58,11 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 			tags, err := session.ListQueueTags(&input)
 			h.LogIfError(err)
 
-			if nd.Parent.TagsFound(tags) {
-				if r, err := createResourceDescription(nd, qu); err == nil {
+			tl, found := nd.Parent.TagsFound(tags)
+			ts := b.TagsToString(tl)
+
+			if found {
+				if r, err := createResourceDescription(nd, ts, qu); err == nil {
 					ch <- r
 				}
 				h.LogIfError(err)

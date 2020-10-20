@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescription) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, td *elbv2.TagDescription) (*b.ResourceDescription, error) {
 	lbID := strings.Split(*td.ResourceArn, "loadbalancer/")[1]
 	lbTypeAndName := strings.Split(lbID, "/")
 	lbName := lbTypeAndName[1]
@@ -39,6 +39,7 @@ func createResourceDescription(nd *b.NamespaceDescription, td *elbv2.TagDescript
 	rd.ID = td.ResourceArn
 	rd.Name = &lbName
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, nil
 }
@@ -76,8 +77,10 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 
 	resources := []*b.ResourceDescription{}
 	for _, td := range tagDescriptions {
-		if nd.Parent.TagsFound(td) {
-			if r, err := createResourceDescription(nd, td); err == nil {
+		tl, found := nd.Parent.TagsFound(td)
+		ts := b.TagsToString(tl)
+		if found {
+			if r, err := createResourceDescription(nd, ts, td); err == nil {
 				resources = append(resources, r)
 			}
 			h.LogIfError(err)

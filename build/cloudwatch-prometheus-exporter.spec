@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.3
+Version: 0.1.4
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Oct 21 2020 Serghei Anicheev <serghei@covergenius.com>
+- Expose existing AWS tags as a separate label
 * Tue Oct 20 2020 Andrew Wright <andrew.w@covergenius.com>
 - Remove default period from most metrics
 * Tue Jun 02 2020 Serghei Anicheev <serghei@covergenius.com>

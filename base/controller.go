@@ -88,6 +88,7 @@ type ResourceDescription struct {
 	Parent     *NamespaceDescription
 	Mutex      sync.RWMutex
 	Query      []*cloudwatch.MetricDataQuery
+	Tags       *string
 }
 
 func (md *MetricDescription) metricName(stat string) *string {
@@ -254,7 +255,7 @@ func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwat
 				},
 				// We hardcode the label so that we can rely on the ordering in
 				// saveData.
-				Label:      aws.String((&awsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region}).String()),
+				Label:      aws.String((&awsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region, *rd.Tags}).String()),
 				ReturnData: aws.Bool(true),
 			}
 			query = append(query, cm)
@@ -269,23 +270,25 @@ type awsLabels struct {
 	id        string
 	rType     string
 	region    string
+	tags      string
 }
 
 func (l *awsLabels) String() string {
-	return fmt.Sprintf("%s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region)
+	return fmt.Sprintf("%s %s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region, l.tags)
 }
 
 func awsLabelsFromString(s string) (*awsLabels, error) {
 	stringLabels := strings.Split(s, " ")
-	if len(stringLabels) < 5 {
-		return nil, fmt.Errorf("expected at least five labels, got %s", s)
+	if len(stringLabels) < 6 {
+		return nil, fmt.Errorf("expected at least six labels, got %s", s)
 	}
 	labels := awsLabels{
-		statistic: stringLabels[len(stringLabels)-5],
-		name:      stringLabels[len(stringLabels)-4],
-		id:        stringLabels[len(stringLabels)-3],
-		rType:     stringLabels[len(stringLabels)-2],
-		region:    stringLabels[len(stringLabels)-1],
+		statistic: stringLabels[len(stringLabels)-6],
+		name:      stringLabels[len(stringLabels)-5],
+		id:        stringLabels[len(stringLabels)-4],
+		rType:     stringLabels[len(stringLabels)-3],
+		region:    stringLabels[len(stringLabels)-2],
+		tags:      stringLabels[len(stringLabels)-1],
 	}
 	return &labels, nil
 }
@@ -332,7 +335,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 			continue
 		}
 
-		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region}})
+		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region, labels.tags}})
 	}
 	for stat, data := range newData {
 		name := *md.metricName(stat)
@@ -340,7 +343,7 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 			Name: name,
 			Help: *md.Help,
 		}
-		labels := []string{"name", "id", "type", "region"}
+		labels := []string{"name", "id", "type", "region", "tags"}
 
 		exporter.mutex.Lock()
 		if _, ok := exporter.data[name+region]; !ok {
@@ -380,14 +383,14 @@ func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, lab
 	return values
 }
 
-func (rd *RegionDescription) TagsFound(tl interface{}) bool {
+func (rd *RegionDescription) TagsFound(tl interface{}) ([]*TagDescription, bool) {
 	tags := []*TagDescription{}
 
 	// Not sure how to deal with code duplication here
 	switch i := tl.(type) {
 	case *elb.TagDescription:
 		if len(i.Tags) < 1 {
-			return false
+			return tags, false
 		}
 		for _, tag := range i.Tags {
 			t := TagDescription{}
@@ -396,7 +399,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		}
 	case *elbv2.TagDescription:
 		if len(i.Tags) < 1 {
-			return false
+			return tags, false
 		}
 		for _, tag := range i.Tags {
 			t := TagDescription{}
@@ -405,7 +408,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		}
 	case *rds.ListTagsForResourceOutput:
 		if len(i.TagList) < 1 {
-			return false
+			return tags, false
 		}
 		for _, tag := range i.TagList {
 			t := TagDescription{}
@@ -414,7 +417,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		}
 	case *elasticache.TagListMessage:
 		if len(i.TagList) < 1 {
-			return false
+			return tags, false
 		}
 		for _, tag := range i.TagList {
 			t := TagDescription{}
@@ -423,7 +426,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		}
 	case *s3.GetBucketTaggingOutput:
 		if len(i.TagSet) < 1 {
-			return false
+			return tags, false
 		}
 		for _, tag := range i.TagSet {
 			t := TagDescription{}
@@ -432,7 +435,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 		}
 	case *sqs.ListQueueTagsOutput:
 		if len(i.Tags) < 1 {
-			return false
+			return tags, false
 		}
 		for key, value := range i.Tags {
 			t := TagDescription{
@@ -442,7 +445,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 			tags = append(tags, &t)
 		}
 	default:
-		return false
+		return tags, false
 	}
 
 	l1 := len(rd.Tags)
@@ -450,7 +453,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 	numberOfNegativeMatches := l1
 
 	if l1 > l2 {
-		return false
+		return tags, false
 	}
 
 	for _, left := range rd.Tags {
@@ -461,10 +464,25 @@ func (rd *RegionDescription) TagsFound(tl interface{}) bool {
 			}
 		}
 		if numberOfNegativeMatches == 0 {
-			return true
+			return tags, true
 		}
 	}
-	return false
+	return tags, false
+}
+
+func TagsToString(tags []*TagDescription) *string {
+	result := "N/A"
+	if len(tags) < 1 {
+		return &result
+	}
+
+	tl := []string{}
+	for _, tag := range tags {
+		ts := fmt.Sprintf("%s=%s", *tag.Key, *tag.Value)
+		tl = append(tl, ts)
+	}
+	result = strings.Join(tl, ",")
+	return &result
 }
 
 func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription) (*cloudwatch.GetMetricDataOutput, error) {

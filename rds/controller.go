@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, dbi *rds.DBInstance) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, dbi *rds.DBInstance) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -27,6 +27,7 @@ func createResourceDescription(nd *b.NamespaceDescription, dbi *rds.DBInstance) 
 	rd.Name = dbi.DBInstanceIdentifier
 	rd.Type = aws.String("rds")
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, nil
 }
@@ -52,8 +53,11 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 			tags, err := session.ListTagsForResource(&input)
 			h.LogIfError(err)
 
-			if nd.Parent.TagsFound(tags) {
-				if r, err := createResourceDescription(nd, dbi); err == nil {
+			tl, found := nd.Parent.TagsFound(tags)
+			ts := b.TagsToString(tl)
+
+			if found {
+				if r, err := createResourceDescription(nd, ts, dbi); err == nil {
 					ch <- r
 				}
 				h.LogIfError(err)

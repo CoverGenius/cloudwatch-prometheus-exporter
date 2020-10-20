@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, cc *elasticache.CacheCluster) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, cc *elasticache.CacheCluster) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -26,6 +26,7 @@ func createResourceDescription(nd *b.NamespaceDescription, cc *elasticache.Cache
 	rd.Name = cc.CacheClusterId
 	rd.Type = aws.String("elasticache")
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, nil
 }
@@ -58,8 +59,11 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 			tags, err := session.ListTagsForResource(&input)
 			h.LogIfError(err)
 
-			if nd.Parent.TagsFound(tags) {
-				if r, err := createResourceDescription(nd, cc); err == nil {
+			tl, found := nd.Parent.TagsFound(tags)
+			ts := b.TagsToString(tl)
+
+			if found {
+				if r, err := createResourceDescription(nd, ts, cc); err == nil {
 					ch <- r
 				}
 				h.LogIfError(err)
