@@ -26,6 +26,7 @@ func createResourceDescription(nd *b.NamespaceDescription, ng *ec2.NatGateway) (
 	rd.Name = ng.NatGatewayId
 	rd.Type = aws.String("nat-gateway")
 	rd.Parent = nd
+	rd.Tags = aws.String("")
 
 	return &rd, nil
 }

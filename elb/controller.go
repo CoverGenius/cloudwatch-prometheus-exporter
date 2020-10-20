@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescription) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, td *elb.TagDescription) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -25,6 +25,7 @@ func createResourceDescription(nd *b.NamespaceDescription, td *elb.TagDescriptio
 	rd.Name = td.LoadBalancerName
 	rd.Type = aws.String("lb-classic")
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, nil
 }
@@ -54,8 +55,10 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 
 	resources := []*b.ResourceDescription{}
 	for _, td := range tags.TagDescriptions {
-		if nd.Parent.TagsFound(td) {
-			if r, err := createResourceDescription(nd, td); err == nil {
+		tl, found := nd.Parent.TagsFound(td)
+		ts := b.TagsToString(tl)
+		if found {
+			if r, err := createResourceDescription(nd, ts, td); err == nil {
 				resources = append(resources, r)
 			}
 			h.LogIfError(err)

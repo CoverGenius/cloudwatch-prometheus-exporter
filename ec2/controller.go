@@ -5,6 +5,8 @@ import (
 	h "github.com/CoverGenius/cloudwatch-prometheus-exporter/helpers"
 	log "github.com/sirupsen/logrus"
 
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -23,9 +25,18 @@ func createResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 		return nil, err
 	}
 
+	tl := []string{}
 	tags := make(map[string]*string)
 	for _, t := range instance.Tags {
 		tags[*t.Key] = t.Value
+		ts := fmt.Sprintf("%s=%s", *t.Key, *t.Value)
+		tl = append(tl, ts)
+	}
+
+	if len(tl) < 1 {
+		rd.Tags = aws.String("")
+	} else {
+		rd.Tags = aws.String(strings.Join(tl, ","))
 	}
 
 	rd.ID = instance.InstanceId

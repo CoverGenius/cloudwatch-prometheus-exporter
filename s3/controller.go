@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func createResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) (*b.ResourceDescription, error) {
+func createResourceDescription(nd *b.NamespaceDescription, tags *string, bucket *s3.Bucket) (*b.ResourceDescription, error) {
 	rd := b.ResourceDescription{}
 	dd := []*b.DimensionDescription{
 		{
@@ -28,6 +28,7 @@ func createResourceDescription(nd *b.NamespaceDescription, bucket *s3.Bucket) (*
 	rd.Name = bucket.Name
 	rd.Type = aws.String("s3")
 	rd.Parent = nd
+	rd.Tags = tags
 
 	return &rd, err
 }
@@ -72,8 +73,11 @@ func CreateResourceList(nd *b.NamespaceDescription, wg *sync.WaitGroup) {
 				h.LogIfError(err)
 			}
 
-			if nd.Parent.TagsFound(tags) {
-				if r, err := createResourceDescription(nd, bucket); err == nil {
+			tl, found := nd.Parent.TagsFound(tags)
+			ts := b.TagsToString(tl)
+
+			if found {
+				if r, err := createResourceDescription(nd, ts, bucket); err == nil {
 					ch <- r
 				}
 				h.LogIfError(err)
