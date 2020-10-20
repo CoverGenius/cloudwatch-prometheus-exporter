@@ -34,9 +34,9 @@ func createResourceDescription(nd *b.NamespaceDescription, instance *ec2.Instanc
 	}
 
 	if len(tl) < 1 {
-		rd.Tags = h.StringP("N/A")
+		rd.Tags = aws.String("")
 	} else {
-		rd.Tags = h.StringP(strings.Join(tl, ","))
+		rd.Tags = aws.String(strings.Join(tl, ","))
 	}
 
 	rd.ID = instance.InstanceId

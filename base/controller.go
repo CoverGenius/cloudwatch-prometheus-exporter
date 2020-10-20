@@ -471,7 +471,7 @@ func (rd *RegionDescription) TagsFound(tl interface{}) ([]*TagDescription, bool)
 }
 
 func TagsToString(tags []*TagDescription) *string {
-	result := "N/A"
+	result := ""
 	if len(tags) < 1 {
 		return &result
 	}
