@@ -26,6 +26,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	NON_CLOUDWATCH_KIND = "CUSTOM"
+	CLOUDWATCH_KIND     = "CLOUDWATCH"
+)
+
 var alphaRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
 
 // TagDescription represents an AWS tag key value pair
@@ -52,8 +57,17 @@ type MetricDescription struct {
 	RangeSeconds  int64
 	Statistic     []*string
 
-	timestamps map[awsLabels]*time.Time
+	Kind       *string
+	GatherFunc func([]*ResourceDescription, time.Time, time.Time) ([]*NonCloudWatchMetric, error)
+
+	timestamps map[AwsLabels]*time.Time
 	mutex      sync.RWMutex
+}
+
+type NonCloudWatchMetric struct {
+	Values     []*float64
+	Label      *string
+	Timestamps []*time.Time
 }
 
 // RegionDescription describes an AWS region which will be monitored via cloudwatch
@@ -203,13 +217,23 @@ func (rd *RegionDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 // GatherMetrics queries the Cloudwatch API for metrics related to this AWS namespace in the parent region
 func (nd *NamespaceDescription) GatherMetrics(cw *cloudwatch.CloudWatch) {
 	for _, md := range nd.Metrics {
-		go func(md *MetricDescription) {
-			nd.Mutex.RLock()
-			result, err := md.getData(cw, nd.Resources)
-			nd.Mutex.RUnlock()
-			h.LogIfError(err)
-			md.saveData(result, *nd.Parent.Region)
-		}(md)
+		if md.Kind != nil && *md.Kind == NON_CLOUDWATCH_KIND {
+			go func(md *MetricDescription) {
+				nd.Mutex.RLock()
+				result, err := md.getNCWData(nd.Resources)
+				nd.Mutex.RUnlock()
+				h.LogIfError(err)
+				md.saveNCWData(result, *nd.Parent.Region)
+			}(md)
+		} else {
+			go func(md *MetricDescription) {
+				nd.Mutex.RLock()
+				result, err := md.getCWData(cw, nd.Resources)
+				nd.Mutex.RUnlock()
+				h.LogIfError(err)
+				md.saveCWData(result, *nd.Parent.Region)
+			}(md)
+		}
 	}
 }
 
@@ -255,7 +279,7 @@ func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwat
 				},
 				// We hardcode the label so that we can rely on the ordering in
 				// saveData.
-				Label:      aws.String((&awsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region, *rd.Tags}).String()),
+				Label:      aws.String((&AwsLabels{*stat, *rd.Name, *rd.ID, *rd.Type, *rd.Parent.Parent.Region, *rd.Tags}).String()),
 				ReturnData: aws.Bool(true),
 			}
 			query = append(query, cm)
@@ -264,36 +288,36 @@ func (md *MetricDescription) BuildQuery(rds []*ResourceDescription) ([]*cloudwat
 	return query, nil
 }
 
-type awsLabels struct {
-	statistic string
-	name      string
-	id        string
-	rType     string
-	region    string
-	tags      string
+type AwsLabels struct {
+	Statistic string
+	Name      string
+	Id        string
+	RType     string
+	Region    string
+	Tags      string
 }
 
-func (l *awsLabels) String() string {
-	return fmt.Sprintf("%s %s %s %s %s %s", l.statistic, l.name, l.id, l.rType, l.region, l.tags)
+func (l *AwsLabels) String() string {
+	return fmt.Sprintf("%s %s %s %s %s %s", l.Statistic, l.Name, l.Id, l.RType, l.Region, l.Tags)
 }
 
-func awsLabelsFromString(s string) (*awsLabels, error) {
+func awsLabelsFromString(s string) (*AwsLabels, error) {
 	stringLabels := strings.Split(s, " ")
 	if len(stringLabels) < 6 {
 		return nil, fmt.Errorf("expected at least six labels, got %s", s)
 	}
-	labels := awsLabels{
-		statistic: stringLabels[len(stringLabels)-6],
-		name:      stringLabels[len(stringLabels)-5],
-		id:        stringLabels[len(stringLabels)-4],
-		rType:     stringLabels[len(stringLabels)-3],
-		region:    stringLabels[len(stringLabels)-2],
-		tags:      stringLabels[len(stringLabels)-1],
+	labels := AwsLabels{
+		Statistic: stringLabels[0],
+		Name:      stringLabels[1],
+		Id:        stringLabels[2],
+		RType:     stringLabels[3],
+		Region:    stringLabels[4],
+		Tags:      stringLabels[5],
 	}
 	return &labels, nil
 }
 
-func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region string) {
+func (md *MetricDescription) saveCWData(c *cloudwatch.GetMetricDataOutput, region string) {
 	newData := map[string][]*promMetric{}
 	for _, stat := range md.Statistic {
 		// pre-allocate in case the last resource for a stat goes away
@@ -310,13 +334,13 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 			continue
 		}
 
-		values := md.filterValues(data, labels)
+		values := md.filterCWValues(data, labels)
 		if len(values) <= 0 {
 			continue
 		}
 
 		value := 0.0
-		switch labels.statistic {
+		switch labels.Statistic {
 		case "Average":
 			value, err = h.Average(values)
 		case "Sum":
@@ -328,14 +352,14 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 		case "SampleCount":
 			value, err = h.Sum(values)
 		default:
-			err = fmt.Errorf("unknown statistic type: %s", labels.statistic)
+			err = fmt.Errorf("unknown statistic type: %s", labels.Statistic)
 		}
 		if err != nil {
 			h.LogIfError(err)
 			continue
 		}
 
-		newData[labels.statistic] = append(newData[labels.statistic], &promMetric{value, []string{labels.name, labels.id, labels.rType, labels.region, labels.tags}})
+		newData[labels.Statistic] = append(newData[labels.Statistic], &promMetric{value, []string{labels.Name, labels.Id, labels.RType, labels.Region, labels.Tags}})
 	}
 	for stat, data := range newData {
 		name := *md.metricName(stat)
@@ -361,16 +385,86 @@ func (md *MetricDescription) saveData(c *cloudwatch.GetMetricDataOutput, region 
 	}
 }
 
-func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, labels *awsLabels) []*float64 {
+func (md *MetricDescription) saveNCWData(metrics []*NonCloudWatchMetric, region string) {
+	newData := map[string][]*promMetric{}
+	for _, stat := range md.Statistic {
+		// pre-allocate in case the last resource for a stat goes away
+		newData[*stat] = []*promMetric{}
+	}
+
+	for _, data := range metrics {
+		if len(data.Values) <= 0 {
+			continue
+		}
+
+		labels, err := awsLabelsFromString(*data.Label)
+		if err != nil {
+			h.LogIfError(err)
+			continue
+		}
+
+		values := md.filterNCWValues(data, labels)
+		if len(values) <= 0 {
+			continue
+		}
+
+		value := 0.0
+		switch labels.Statistic {
+		case "Average":
+			value, err = h.Average(values)
+		case "Sum":
+			value, err = h.Sum(values)
+		case "Minimum":
+			value, err = h.Min(values)
+		case "Maximum":
+			value, err = h.Max(values)
+		case "SampleCount":
+			value, err = h.Sum(values)
+		default:
+			err = fmt.Errorf("unknown statistic type: %s", labels.Statistic)
+		}
+		if err != nil {
+			h.LogIfError(err)
+			continue
+		}
+
+		newData[labels.Statistic] = append(newData[labels.Statistic], &promMetric{value, []string{labels.Name, labels.Id, labels.RType, labels.Region, labels.Tags}})
+	}
+
+	for stat, data := range newData {
+		name := *md.metricName(stat)
+		opts := prometheus.Opts{
+			Name: name,
+			Help: *md.Help,
+		}
+		labels := []string{"name", "id", "type", "region", "tags"}
+
+		exporter.mutex.Lock()
+		if _, ok := exporter.data[name+region]; !ok {
+			if stat == "Sum" {
+				exporter.data[name+region] = NewBatchCounterVec(opts, labels)
+			} else {
+				exporter.data[name+region] = NewBatchGaugeVec(opts, labels)
+			}
+		}
+		exporter.mutex.Unlock()
+
+		exporter.mutex.RLock()
+		exporter.data[name+region].BatchUpdate(data)
+		exporter.mutex.RUnlock()
+	}
+}
+
+func (md *MetricDescription) filterCWValues(data *cloudwatch.MetricDataResult, labels *AwsLabels) []*float64 {
 	// In the case of a counter we need to remove any datapoints which have
 	// already been added to the counter, otherwise if the poll intervals
 	// overlap we will double count some data.
 	values := data.Values
-	if labels.statistic == "Sum" {
+	if labels.Statistic == "Sum" {
 		md.mutex.Lock()
 		defer md.mutex.Unlock()
 		if md.timestamps == nil {
-			md.timestamps = make(map[awsLabels]*time.Time)
+			md.timestamps = make(map[AwsLabels]*time.Time)
 		}
 		if lastTimestamp, ok := md.timestamps[*labels]; ok {
 			values = h.NewValues(data.Values, data.Timestamps, *lastTimestamp)
@@ -378,6 +472,28 @@ func (md *MetricDescription) filterValues(data *cloudwatch.MetricDataResult, lab
 		if len(values) > 0 {
 			// AWS returns the data in descending order
 			md.timestamps[*labels] = data.Timestamps[0]
+		}
+	}
+	return values
+}
+
+func (md *MetricDescription) filterNCWValues(metric *NonCloudWatchMetric, labels *AwsLabels) []*float64 {
+	// In the case of a counter we need to remove any datapoints which have
+	// already been added to the counter, otherwise if the poll intervals
+	// overlap we will double count some data.
+	values := metric.Values
+	if labels.Statistic == "Sum" {
+		md.mutex.Lock()
+		defer md.mutex.Unlock()
+		if md.timestamps == nil {
+			md.timestamps = make(map[AwsLabels]*time.Time)
+		}
+		if lastTimestamp, ok := md.timestamps[*labels]; ok {
+			values = h.NewValues(metric.Values, metric.Timestamps, *lastTimestamp)
+		}
+		if len(values) > 0 {
+			// AWS returns the data in descending order
+			md.timestamps[*labels] = metric.Timestamps[0]
 		}
 	}
 	return values
@@ -485,7 +601,8 @@ func TagsToString(tags []*TagDescription) *string {
 	return &result
 }
 
-func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription) (*cloudwatch.GetMetricDataOutput, error) {
+// This function is used to fetch data from cloudwatch
+func (md *MetricDescription) getCWData(cw *cloudwatch.CloudWatch, rds []*ResourceDescription) (*cloudwatch.GetMetricDataOutput, error) {
 	query, err := md.BuildQuery(rds)
 	if len(query) == 0 {
 		return &cloudwatch.GetMetricDataOutput{}, nil
@@ -501,6 +618,17 @@ func (md *MetricDescription) getData(cw *cloudwatch.CloudWatch, rds []*ResourceD
 		MetricDataQueries: query,
 	}
 	result, err := cw.GetMetricData(&input)
+	h.LogIfError(err)
+
+	return result, err
+}
+
+// This function is used to fetch data from AWS resources(non-cloudwatch)
+func (md *MetricDescription) getNCWData(rds []*ResourceDescription) ([]*NonCloudWatchMetric, error) {
+	end := time.Now().Round(5 * time.Minute)
+	start := end.Add(-time.Duration(md.RangeSeconds) * time.Second)
+
+	result, err := md.GatherFunc(rds, start, end)
 	h.LogIfError(err)
 
 	return result, err

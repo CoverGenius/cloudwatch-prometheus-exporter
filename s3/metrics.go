@@ -15,6 +15,7 @@ var Metrics = map[string]*b.MetricDescription{
 		Statistic:     h.StringPointers("Average"),
 		PeriodSeconds: 60 * 60 * 24,
 		RangeSeconds:  60 * 60 * 24 * 7,
+		Kind:          aws.String(b.CLOUDWATCH_KIND),
 		Dimensions: []*cloudwatch.Dimension{
 			{
 				Name:  aws.String("StorageType"),
@@ -28,6 +29,7 @@ var Metrics = map[string]*b.MetricDescription{
 		Statistic:     h.StringPointers("Average"),
 		PeriodSeconds: 60 * 60 * 24,
 		RangeSeconds:  60 * 60 * 24 * 7,
+		Kind:          aws.String(b.CLOUDWATCH_KIND),
 		Dimensions: []*cloudwatch.Dimension{
 			{
 				Name:  aws.String("StorageType"),
