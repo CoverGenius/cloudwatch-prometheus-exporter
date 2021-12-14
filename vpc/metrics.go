@@ -25,6 +25,10 @@ func findSubnet(subnets []*ec2.Subnet, id *string) (*ec2.Subnet, error) {
 }
 
 func gatherAvailableIPFunc(rds []*b.ResourceDescription, start time.Time, end time.Time) ([]*b.NonCloudWatchMetric, error) {
+	if len(rds) < 1 {
+		return []*b.NonCloudWatchMetric{&b.NonCloudWatchMetric{}}, nil
+	}
+
 	subnetIDs := make([]*string, len(rds))
 
 	for idx, rd := range rds {
@@ -68,6 +72,10 @@ func gatherAvailableIPFunc(rds []*b.ResourceDescription, start time.Time, end ti
 }
 
 func gatherTotalIPFunc(rds []*b.ResourceDescription, start time.Time, end time.Time) ([]*b.NonCloudWatchMetric, error) {
+	if len(rds) < 1 {
+		return []*b.NonCloudWatchMetric{&b.NonCloudWatchMetric{}}, nil
+	}
+
 	subnetIDs := make([]*string, len(rds))
 
 	for idx, rd := range rds {
