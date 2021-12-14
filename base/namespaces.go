@@ -10,6 +10,7 @@ var namespaces = []string{
 	"AWS/EC2",
 	"AWS/S3",
 	"AWS/SQS",
+	"AWS/VPC",
 }
 
 // GetNamespaces returns a list of AWS namespaces which are configured for this exporter
