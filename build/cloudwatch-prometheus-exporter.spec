@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.5
+Version: 0.1.6
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Jan 10 2021 Andrew Wright <andrew.w@covergenius.com>
+- Add database memory usage metric for elasticache
 * Tue Dec 14 2021 Serghei Anicheev <serghei@covergenius.com>
 - Expose IP address usage per subnet
 * Wed Oct 21 2020 Serghei Anicheev <serghei@covergenius.com>
