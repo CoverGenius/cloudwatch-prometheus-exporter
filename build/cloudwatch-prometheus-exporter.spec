@@ -38,7 +38,7 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Mon Jan 10 2021 Andrew Wright <andrew.w@covergenius.com>
+* Mon Jan 10 2022 Andrew Wright <andrew.w@covergenius.com>
 - Add database memory usage metric for elasticache
 * Tue Dec 14 2021 Serghei Anicheev <serghei@covergenius.com>
 - Expose IP address usage per subnet
