@@ -89,6 +89,14 @@ var Metrics = map[string]*b.MetricDescription{
 
 		Dimensions: []*cloudwatch.Dimension{},
 	},
+	"DatabaseMemoryUsagePercentage": {
+		Help:       aws.String("The percentage of available memory used by the database"),
+		OutputName: aws.String("elasticache_database_memory_usage_percentage"),
+		Statistic:  h.StringPointers("Average"),
+		Kind:       aws.String(b.CLOUDWATCH_KIND),
+
+		Dimensions: []*cloudwatch.Dimension{},
+	},
 	"GetTypeCmds": {
 		Help:       aws.String("The total number of read-only type commands"),
 		OutputName: aws.String("elasticache_get_type_cmds"),
