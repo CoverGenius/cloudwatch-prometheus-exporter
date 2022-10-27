@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CoverGenius/cloudwatch-prometheus-exporter/backup"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/ec2"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elasticache"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/elb"
@@ -41,7 +42,7 @@ func run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd
 		select {
 		case <-time.After(time.Duration(delay) * time.Second):
 			var wg sync.WaitGroup
-			wg.Add(10)
+			wg.Add(11)
 			log.Debug("Creating list of resources ...")
 			go elasticache.CreateResourceList(nd["AWS/ElastiCache"], &wg)
 			go rds.CreateResourceList(nd["AWS/RDS"], &wg)
@@ -53,6 +54,7 @@ func run(nd map[string]*base.NamespaceDescription, cw *cloudwatch.CloudWatch, rd
 			go s3.CreateResourceList(nd["AWS/S3"], &wg)
 			go sqs.CreateResourceList(nd["AWS/SQS"], &wg)
 			go vpc.CreateResourceList(nd["AWS/VPC"], &wg)
+			go backup.CreateResourceList(nd["AWS/Backup"], &wg)
 			wg.Wait()
 			delay = pi
 			go rd.GatherMetrics(cw)
@@ -112,6 +114,7 @@ func main() {
 		"AWS/S3":             s3.Metrics,
 		"AWS/SQS":            sqs.Metrics,
 		"AWS/VPC":            vpc.Metrics,
+		"AWS/Backup":         backup.Metrics,
 	}
 	mds := c.ConstructMetrics(defaults)
 
