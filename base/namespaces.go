@@ -1,6 +1,7 @@
 package base
 
 var namespaces = []string{
+	"AWS/Backup",
 	"AWS/ELB",
 	"AWS/NetworkELB",
 	"AWS/ApplicationELB",

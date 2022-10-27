@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/backup"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elasticache"
@@ -560,6 +561,18 @@ func (rd *RegionDescription) TagsFound(tl interface{}) ([]*TagDescription, bool)
 			}
 			tags = append(tags, &t)
 		}
+	case *backup.ListTagsOutput:
+		if len(i.Tags) < 1 {
+			return tags, false
+		}
+		for key, value := range i.Tags {
+			t := TagDescription{
+				Key:   aws.String(key),
+				Value: value,
+			}
+			tags = append(tags, &t)
+		}
+
 	default:
 		return tags, false
 	}
