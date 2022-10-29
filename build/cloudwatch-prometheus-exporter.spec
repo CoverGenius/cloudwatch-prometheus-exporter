@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.6
+Version: 0.1.7
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Sat Oct 29 2022 Serghei Anicheev <serghei@covergenius.com>
+- Add AWS/Backup namespace
 * Mon Jan 10 2022 Andrew Wright <andrew.w@covergenius.com>
 - Add database memory usage metric for elasticache
 * Tue Dec 14 2021 Serghei Anicheev <serghei@covergenius.com>
