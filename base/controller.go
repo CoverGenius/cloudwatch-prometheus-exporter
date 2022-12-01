@@ -3,6 +3,7 @@ package base
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -610,6 +611,9 @@ func TagsToString(tags []*TagDescription) *string {
 		ts := fmt.Sprintf("%s=%s", *tag.Key, *tag.Value)
 		tl = append(tl, ts)
 	}
+
+	sort.Strings(tl)
+
 	result = strings.Join(tl, ",")
 	return &result
 }
