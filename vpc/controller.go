@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -28,10 +29,13 @@ func createResourceDescription(nd *b.NamespaceDescription, subnet *ec2.Subnet) (
 	tl := []string{}
 	tags := make(map[string]*string)
 	for _, t := range subnet.Tags {
+		*t.Value = strings.ReplaceAll(*t.Value, " ", "_")
 		tags[*t.Key] = t.Value
 		ts := fmt.Sprintf("%s=%s", *t.Key, *t.Value)
 		tl = append(tl, ts)
 	}
+
+	sort.Strings(tl)
 
 	if len(tl) < 1 {
 		rd.Tags = aws.String("")
