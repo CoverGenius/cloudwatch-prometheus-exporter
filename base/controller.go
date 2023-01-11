@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
+	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/backup"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
@@ -20,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -34,6 +34,16 @@ const (
 )
 
 var alphaRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+func CreateAWSSession(config *Config, region *string) *session.Session {
+	if config.APIKey == "" || config.APISecret == "" {
+		return session.Must(session.NewSessionWithOptions(session.Options{
+			Config: *aws.NewConfig().WithRegion(*region).WithCredentials(ec2rolecreds.NewCredentials(session.New())),
+		}))
+	} else {
+		return session.Must(session.NewSession(&aws.Config{Region: region}))
+	}
+}
 
 // TagDescription represents an AWS tag key value pair
 type TagDescription struct {
@@ -150,38 +160,18 @@ func (rd *RegionDescription) saveFilters() {
 	rd.Filters = filters
 }
 
-func (rd *RegionDescription) saveAccountID() error {
-	session := iam.New(rd.Session)
-	input := iam.GetUserInput{}
-	user, err := session.GetUser(&input)
-	if err != nil {
-		return err
-	}
-
-	a, err := arn.Parse(*user.User.Arn)
-	if err != nil {
-		return err
-	}
-	rd.AccountID = &a.AccountID
-
-	return nil
-}
-
 // Init initializes a region and its nested namespaces in preparation for
 // collection of cloudwatchc metrics for that region.
-func (rd *RegionDescription) Init(s *session.Session, td []*TagDescription, metrics map[string][]*MetricDescription) error {
+func (rd *RegionDescription) Init(s *session.Session, accountID *string, td []*TagDescription, metrics map[string][]*MetricDescription) error {
 	log.Infof("Initializing region %s ...", *rd.Region)
 	rd.Session = s
 	rd.Tags = td
 
-	err := rd.saveAccountID()
-	if err != nil {
-		return fmt.Errorf("error saving account id: %s", err)
-	}
+	rd.AccountID = accountID
 
 	rd.saveFilters()
 
-	err = rd.CreateNamespaceDescriptions(metrics)
+	err := rd.CreateNamespaceDescriptions(metrics)
 	if err != nil {
 		return fmt.Errorf("error creating namespaces: %s", err)
 	}
