@@ -5,7 +5,7 @@
 
 
 Name: cloudwatch-prometheus-exporter
-Version: 0.1.8
+Version: 0.1.9
 Release: 0%{?dist}
 Summary: Cloudwatch Prometheus Exporter
 License: BSD
@@ -38,6 +38,8 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Wed Dec 11 2023 Serghei Anicheev <serghei@covergenius.com>
+- Adding support for EC2 credentials provider
 * Thu Dec 1 2022 Serghei Anicheev <serghei@covergenius.com>
 - Sanitize tag values used in custom checks
 - Sorting tag names before building resource descriptor

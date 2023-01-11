@@ -16,7 +16,6 @@ import (
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/s3"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/sqs"
 	"github.com/CoverGenius/cloudwatch-prometheus-exporter/vpc"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,8 +27,9 @@ import (
 )
 
 var (
-	rdd    []*base.RegionDescription
-	config string
+	rdd         []*base.RegionDescription
+	aws_session *session.Session
+	config      string
 )
 
 func init() {
@@ -78,8 +78,16 @@ func processConfig(p *string) *base.Config {
 		c.RangeSeconds = 300
 	}
 
-	if c.APIKey == "" || c.APISecret == "" {
-		log.Fatal("Either api_key or api_secret is empty!")
+	if c.AccountID == "" {
+		log.Fatal("Please specify account ID")
+	}
+
+	if c.APIKey != "" && c.APISecret != "" {
+		log.Info("Using access key ID and secret access key in order to establish a session!")
+		os.Setenv("AWS_ACCESS_KEY_ID", c.APIKey)
+		os.Setenv("AWS_SECRET_ACCESS_KEY", c.APISecret)
+	} else {
+		log.Info("api_key or api_secret is empty. Trying EC2 role instead!")
 	}
 
 	if len(c.Regions) < 1 {
@@ -93,9 +101,6 @@ func processConfig(p *string) *base.Config {
 	log.SetOutput(os.Stdout)
 	log.SetLevel(h.GetLogLevel(c.LogLevel))
 
-	os.Setenv("AWS_ACCESS_KEY_ID", c.APIKey)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", c.APISecret)
-
 	return &c
 }
 
@@ -103,6 +108,7 @@ func main() {
 	flag.Parse()
 	// TODO allow hot reload of config
 	c := processConfig(&config)
+
 	defaults := map[string]map[string]*base.MetricDescription{
 		"AWS/RDS":            rds.Metrics,
 		"AWS/ElastiCache":    elasticache.Metrics,
@@ -119,11 +125,11 @@ func main() {
 	mds := c.ConstructMetrics(defaults)
 
 	for _, r := range c.Regions {
-		awsSession := session.Must(session.NewSession(&aws.Config{Region: r}))
+		awsSession := base.CreateAWSSession(c, r)
 		cw := cloudwatch.New(awsSession)
 		rd := base.RegionDescription{Region: r}
 		rdd = append(rdd, &rd)
-		if err := rd.Init(awsSession, c.Tags, mds); err != nil {
+		if err := rd.Init(awsSession, &c.AccountID, c.Tags, mds); err != nil {
 			log.Fatalf("error initializing region: %s", err)
 		}
 
