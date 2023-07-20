@@ -249,4 +249,20 @@ var Metrics = map[string]*b.MetricDescription{
 
 		Dimensions: []*cloudwatch.Dimension{},
 	},
+	"NetworkBandwidthOutAllowanceExceeded": {
+		Help:       aws.String("The number of packets dropped because the outbound bandwidth exceeded"),
+		OutputName: aws.String("elasticache_network_bandwidth_out_allowance_exceeded"),
+		Statistic:  h.StringPointers("Average"),
+		Kind:       aws.String(b.CLOUDWATCH_KIND),
+
+		Dimensions: []*cloudwatch.Dimension{},
+	},
+	"NetworkBandwidthInAllowanceExceeded": {
+		Help:       aws.String("The number of packets dropped because the inbound bandwidth exceeded"),
+		OutputName: aws.String("elasticache_network_bandwidth_in_allowance_exceeded"),
+		Statistic:  h.StringPointers("Average"),
+		Kind:       aws.String(b.CLOUDWATCH_KIND),
+
+		Dimensions: []*cloudwatch.Dimension{},
+	},
 }
