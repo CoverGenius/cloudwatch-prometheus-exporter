@@ -40,7 +40,7 @@ rm -rf %{buildroot}
 %changelog
 * Wed Jul 19 2023 Rajashree Pethe <rajashree@covergenius.com>
 - Adding metrics for elasticache - NetworkBandwidthOutAllowanceExceeded, NetworkBandwidthInAllowanceExceeded
-* Wed Dec 11 2023 Serghei Anicheev <serghei@covergenius.com>
+* Wed Dec 11 2022 Serghei Anicheev <serghei@covergenius.com>
 - Adding support for EC2 credentials provider
 * Thu Dec 1 2022 Serghei Anicheev <serghei@covergenius.com>
 - Sanitize tag values used in custom checks
